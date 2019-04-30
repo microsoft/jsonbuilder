@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
 #include "jsonbuilder/JsonRenderer.h"
 
 #include <cassert>
@@ -9,8 +12,7 @@
 #define WriteChar(ch) m_renderBuffer.push_back(ch)
 #define WriteChars(pch, cch) m_renderBuffer.append(pch, cch)
 
-namespace jsonbuilder
-{
+namespace jsonbuilder {
 /*
 Efficiently multiply two 32-bit unsigned integers to get a 64-bit result.
 (The current VC compiler does not optimize this -- if we don't use an
@@ -482,4 +484,4 @@ void JsonRenderer::RenderNewline()
     WriteChars(m_newLine.data(), static_cast<unsigned>(m_newLine.size()));
     m_renderBuffer.append(m_indent, ' ');
 }
-}
+}  // namespace jsonbuilder
