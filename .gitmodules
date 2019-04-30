@@ -1,3 +1,6 @@
 [submodule "external/Catch2"]
 	path = external/Catch2
 	url = https://github.com/catchorg/Catch2
+[submodule "external/string-view-lite"]
+	path = external/string-view-lite
+	url = https://github.com/martinmoene/string-view-lite
