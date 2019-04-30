@@ -1,0 +1,26 @@
+jobs:
+  - job: Linux
+    pool:
+      vmImage: 'Ubuntu 16.04'
+    steps:
+    - task: CMake@1
+      displayName: 'CMake Configure+Generate'
+      inputs:
+        cmakeArgs: '-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ ..'
+
+    - task: CMake@1
+      displayName: 'CMake Build'
+      inputs:
+        cmakeArgs: '--build .'
+
+    - bash: |
+        cd build/test
+        mkdir testResults
+        ./jsonbuilderTest -o testResults/TEST-JsonBuilderTest.xml -r junit
+      displayName: 'Run test binary'
+      continueOnError: true
+
+    - task: PublishTestResults@2
+      displayName: 'Publish test results'
+      inputs:
+        testResultsFiles: '**/TEST-*.xml'
