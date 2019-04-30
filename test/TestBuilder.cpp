@@ -1,5 +1,9 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
 #include <catch2/catch.hpp>
 #include <jsonbuilder/JsonBuilder.h>
+
 
 using namespace jsonbuilder;
 

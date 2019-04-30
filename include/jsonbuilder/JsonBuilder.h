@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
 /*
 JsonBuilder stores data values of arbitrary type in an optimized tree
 structure (i.e. values may have children). The JsonBuilder type is suitable for
@@ -65,8 +68,8 @@ Error handling:
 
 #include <uuid/uuid.h>
 
-namespace jsonbuilder
-{
+
+namespace jsonbuilder {
 struct UuidStruct
 {
     uuid_t Data;
@@ -81,8 +84,7 @@ class JsonImplementType;
 
 // Internal implementation details
 
-namespace JsonInternal
-{
+namespace JsonInternal {
 /*
 PodVector:
 
@@ -390,7 +392,7 @@ class PodVector : private PodVectorBase
         m_capacity = newCapacity;
     }
 };
-}
+}  // namespace JsonInternal
 // namespace JsonInternal
 
 // JsonType
@@ -1590,4 +1592,4 @@ template<>
 class JsonImplementType<char const*> : public JsonImplementType<char*>
 {};
 
-}
+}  // namespace jsonbuilder

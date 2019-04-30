@@ -1,10 +1,12 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
 #include <cassert>
 
 #include "jsonbuilder/JsonBuilder.h"
 
 
-namespace jsonbuilder
-{
+namespace jsonbuilder {
 //
 // TODO:
 // Copied from OS code
@@ -31,8 +33,7 @@ BitScanReverse(unsigned long* Index, unsigned long Mask)
     return (ii >= 0 ? (unsigned char) 1 : (unsigned char) 0);
 }
 
-namespace JsonInternal
-{
+namespace JsonInternal {
 void PodVectorBase::CheckOffset(size_type index, size_type currentSize) throw()
 {
     (void) index;        // Unreferenced parameter
@@ -118,7 +119,7 @@ void PodVectorBase::Deallocate(void* pb) throw()
         free(pb);
     }
 }
-}
+}  // namespace JsonInternal
 // namespace JsonInternal
 
-}
+}  // namespace jsonbuilder

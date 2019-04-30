@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
 /*
 JsonRenderer converts JsonBuilder trees into utf8 JSON text.
 
@@ -20,8 +23,8 @@ Summary:
 #include <jsonbuilder/JsonBuilder.h>
 #include <uuid/uuid.h>
 
-namespace jsonbuilder
-{
+
+namespace jsonbuilder {
 /*
 Converts JsonBuilder data into utf-8 JSON text.
 Recognizes the built-in JsonType types. To support other (custom) types,
@@ -272,4 +275,4 @@ Returns the number of characters written, not counting the nul-termination.
 */
 unsigned JsonRenderUuidWithBraces(uuid_t const& g, char* pBuffer) throw();
 
-}
+}  // namespace jsonbuilder

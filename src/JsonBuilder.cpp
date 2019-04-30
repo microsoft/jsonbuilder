@@ -1,6 +1,10 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
 #include "jsonbuilder/JsonBuilder.h"
 
 #include <cassert>
+
 
 #define StorageSize sizeof(JsonValue::StoragePod)
 #define DataMax 0xf0000000
@@ -19,8 +23,7 @@ value.DataIndex = value.Index + DATA_OFFSET(value.cchName).
 
 // JsonValue
 
-namespace jsonbuilder
-{
+namespace jsonbuilder {
 // Verify that our conditions like (type >= JsonArray) will work.
 static_assert(JsonHidden == 253, "Incorrect enum numbering for JsonHidden");
 static_assert(JsonArray == 254, "Incorrect enum numbering for JsonArray");
@@ -1406,4 +1409,4 @@ JsonImplementType<UuidStruct>::GetUnchecked(JsonValue const& jsonValue) throw()
         k_emptyUuid;
 }
 
-}
+}  // namespace jsonbuilder

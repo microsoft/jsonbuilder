@@ -2,8 +2,6 @@ cmake_minimum_required(VERSION 3.12)
 
 project(jsonbuilder)
 
-# Include sub-projects.
-
 add_subdirectory(src)
 
 # Only include testing stuff if we are the top level
