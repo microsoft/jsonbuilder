@@ -3,6 +3,7 @@
 
 #include <cstdio>
 #include <iterator>
+#include <type_traits>
 
 #include <catch2/catch.hpp>
 #include <jsonbuilder/JsonRenderer.h>
@@ -25,7 +26,10 @@ static void TestUInt(N n)
         REQUIRE(buf1[i] == 1);
     }
     std::snprintf(
-        buf2, std::size(buf2), "%llu", static_cast<long long unsigned>(n));
+        buf2,
+        std::extent<decltype(buf2)>::value,
+        "%llu",
+        static_cast<long long unsigned>(n));
     for (unsigned i = 0; i <= cch; i++)
     {
         REQUIRE(buf1[i] == buf2[i]);
@@ -47,7 +51,11 @@ static void TestInt(N n)
     {
         REQUIRE(buf1[i] == 1);
     }
-    std::snprintf(buf2, std::size(buf2), "%lld", static_cast<long long signed>(n));
+    std::snprintf(
+        buf2,
+        std::extent<decltype(buf2)>::value,
+        "%lld",
+        static_cast<long long signed>(n));
     for (unsigned i = 0; i <= cch; i++)
     {
         REQUIRE(buf1[i] == buf2[i]);
@@ -69,7 +77,8 @@ static void TestFloat(N n)
     {
         REQUIRE(buf1[i] == 1);
     }
-    std::snprintf(buf2, std::size(buf2), "%.17g", static_cast<double>(n));
+    std::snprintf(
+        buf2, std::extent<decltype(buf2)>::value, "%.17g", static_cast<double>(n));
     for (unsigned i = 0; i <= cch; i++)
     {
         REQUIRE(buf1[i] == buf2[i]);
@@ -160,7 +169,7 @@ TEST_CASE("JsonRenderer JsonNull")
     }
 }
 
-using namespace std::string_view_literals;
+using namespace nonstd::string_view_literals;
 
 TEST_CASE("JsonRenderer JsonTime", "[renderer]")
 {
@@ -171,7 +180,7 @@ TEST_CASE("JsonRenderer JsonTime", "[renderer]")
 
     unsigned cch = JsonRenderTime(epoch, chars);
     REQUIRE(cch == strlen(chars));
-    REQUIRE(chars == "1970-01-01T00:00:00.0000000Z"sv);
+    REQUIRE(chars == "1970-01-01T00:00:00.0000000Z"_sv);
 }
 
 TEST_CASE("JsonRenderer JsonUuid", "[renderer]")
@@ -189,14 +198,14 @@ TEST_CASE("JsonRenderer JsonUuid", "[renderer]")
     {
         unsigned cch = JsonRenderUuid(uuid, chars);
         REQUIRE(cch == strlen(chars));
-        REQUIRE(chars == "00010203-0405-0607-0809-0A0B0C0D0E0F"sv);
+        REQUIRE(chars == "00010203-0405-0607-0809-0A0B0C0D0E0F"_sv);
     }
 
     SECTION("With braces")
     {
         unsigned cch = JsonRenderUuidWithBraces(uuid, chars);
         REQUIRE(cch == strlen(chars));
-        REQUIRE(chars == "{00010203-0405-0607-0809-0A0B0C0D0E0F}"sv);
+        REQUIRE(chars == "{00010203-0405-0607-0809-0A0B0C0D0E0F}"_sv);
     }
 }
 

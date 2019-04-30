@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-#include "jsonbuilder/JsonBuilder.h"
+#include <jsonbuilder/JsonBuilder.h>
 
 #include <cassert>
 
@@ -40,9 +40,9 @@ JsonType JsonValue::Type() const throw()
     return static_cast<JsonType>(m_type);
 }
 
-std::string_view JsonValue::Name() const throw()
+nonstd::string_view JsonValue::Name() const throw()
 {
-    return std::string_view(reinterpret_cast<char const*>(this + 1), m_cchName);
+    return nonstd::string_view(reinterpret_cast<char const*>(this + 1), m_cchName);
 }
 
 void const* JsonValue::Data(unsigned* pcbData) const throw()
@@ -533,7 +533,7 @@ void JsonBuilder::swap(JsonBuilder& other) throw()
 }
 
 unsigned
-JsonBuilder::FindImpl(Index parentIndex, std::string_view const& name) const
+JsonBuilder::FindImpl(Index parentIndex, nonstd::string_view const& name) const
     throw()
 {
     Index result = 0;
@@ -656,7 +656,7 @@ JsonBuilder::cend(const_iterator const& itParent) const throw()
 JsonBuilder::iterator JsonBuilder::AddValue(
     bool front,
     const_iterator const& itParent,
-    std::string_view const& name,
+    nonstd::string_view const& name,
     JsonType type,
     unsigned cbData,
     void const* pbData)
@@ -778,13 +778,13 @@ void JsonBuilder::EnsureRootExists()
     if (m_storage.empty())
     {
         unsigned index;
-        index = CreateValue(std::string_view(), JsonObject, 0, nullptr);
+        index = CreateValue(nonstd::string_view(), JsonObject, 0, nullptr);
         assert(index == 0);
     }
 }
 
 JsonBuilder::Index JsonBuilder::CreateValue(
-    std::string_view const& name,
+    nonstd::string_view const& name,
     JsonType type,
     unsigned cbData,
     void const* pbData)
@@ -900,7 +900,7 @@ and i32) aren't perfectly optimal... But they're probably close enough.
         JsonBuilder& builder,                                      \
         bool front,                                                \
         JsonConstIterator const& itParent,                         \
-        std::string_view const& name,                              \
+        nonstd::string_view const& name,                              \
         DataType const& data)                                      \
     {                                                              \
         return builder.AddValue(                                   \
@@ -1260,7 +1260,7 @@ JsonIterator JsonImplementType<char*>::AddValue(
     JsonBuilder& builder,
     bool front,
     JsonConstIterator const& itParent,
-    std::string_view const& name,
+    nonstd::string_view const& name,
     char const* psz)
 {
     return builder.AddValue(
@@ -1270,18 +1270,18 @@ JsonIterator JsonImplementType<char*>::AddValue(
 IMPLEMENT_AddValue(char, sizeof(data), &data, JsonUtf8);
 IMPLEMENT_AddValue(std::string, data.size(), data.data(), JsonUtf8);
 
-std::string_view
-JsonImplementType<std::string_view>::GetUnchecked(JsonValue const& value) throw()
+nonstd::string_view
+JsonImplementType<nonstd::string_view>::GetUnchecked(JsonValue const& value) throw()
 {
     assert(value.Type() == JsonUtf8);
     unsigned cb;
     void const* pb = value.Data(&cb);
-    return std::string_view(static_cast<char const*>(pb), cb);
+    return nonstd::string_view(static_cast<char const*>(pb), cb);
 }
 
-bool JsonImplementType<std::string_view>::ConvertTo(
+bool JsonImplementType<nonstd::string_view>::ConvertTo(
     JsonValue const& value,
-    std::string_view& result) throw()
+    nonstd::string_view& result) throw()
 {
     bool success;
 
@@ -1292,19 +1292,19 @@ bool JsonImplementType<std::string_view>::ConvertTo(
     }
     else
     {
-        result = std::string_view();
+        result = nonstd::string_view();
         success = false;
     }
 
     return success;
 }
 
-JsonIterator JsonImplementType<std::string_view>::AddValue(
+JsonIterator JsonImplementType<nonstd::string_view>::AddValue(
     JsonBuilder& builder,
     bool front,
     JsonConstIterator const& itParent,
-    std::string_view const& name,
-    std::string_view const& data)
+    nonstd::string_view const& name,
+    nonstd::string_view const& data)
 {
     return builder.AddValue(
         front,
@@ -1321,7 +1321,7 @@ JsonIterator JsonImplementType<std::chrono::system_clock::time_point>::AddValue(
     JsonBuilder& builder,
     bool front,
     JsonConstIterator const& itParent,
-    std::string_view const& name,
+    nonstd::string_view const& name,
     std::chrono::system_clock::time_point const& data)
 {
     std::chrono::nanoseconds nanosSinceEpoch =

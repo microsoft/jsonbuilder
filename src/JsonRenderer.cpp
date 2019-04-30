@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-#include "jsonbuilder/JsonRenderer.h"
+#include <jsonbuilder/JsonRenderer.h>
 
 #include <cassert>
 #include <string>
@@ -190,7 +190,7 @@ unsigned JsonRenderUuidWithBraces(uuid_t const& g, char* pBuffer) throw()
 
 JsonRenderer::JsonRenderer(
     bool pretty,
-    std::string_view const& newLine,
+    nonstd::string_view const& newLine,
     unsigned indentSpaces) throw()
     : m_newLine(newLine), m_indentSpaces(indentSpaces), m_pretty(pretty)
 {
@@ -222,12 +222,12 @@ void JsonRenderer::Pretty(bool value) throw()
     m_pretty = value;
 }
 
-std::string_view const& JsonRenderer::NewLine() const throw()
+nonstd::string_view const& JsonRenderer::NewLine() const throw()
 {
     return m_newLine;
 }
 
-void JsonRenderer::NewLine(std::string_view const& value) throw()
+void JsonRenderer::NewLine(nonstd::string_view const& value) throw()
 {
     m_newLine = value;
 }
@@ -242,17 +242,17 @@ void JsonRenderer::IndentSpaces(unsigned value) throw()
     m_indentSpaces = value;
 }
 
-std::string_view JsonRenderer::Render(JsonBuilder const& builder)
+nonstd::string_view JsonRenderer::Render(JsonBuilder const& builder)
 {
     auto itRoot = builder.end();
     m_renderBuffer.clear();
     m_indent = 0;
     RenderStructure(itRoot, true);
     WriteChar('\0');
-    return std::string_view(m_renderBuffer.data(), m_renderBuffer.size() - 1);
+    return nonstd::string_view(m_renderBuffer.data(), m_renderBuffer.size() - 1);
 }
 
-std::string_view JsonRenderer::Render(JsonBuilder::const_iterator const& it)
+nonstd::string_view JsonRenderer::Render(JsonBuilder::const_iterator const& it)
 {
     m_renderBuffer.clear();
     m_indent = 0;
@@ -265,7 +265,7 @@ std::string_view JsonRenderer::Render(JsonBuilder::const_iterator const& it)
         RenderValue(it);
     }
     WriteChar('\0');
-    return std::string_view(m_renderBuffer.data(), m_renderBuffer.size() - 1);
+    return nonstd::string_view(m_renderBuffer.data(), m_renderBuffer.size() - 1);
 }
 
 void JsonRenderer::RenderCustom(RenderBuffer&, iterator const& it)
@@ -303,7 +303,7 @@ void JsonRenderer::RenderValue(iterator const& it)
         }
         break;
     case JsonUtf8:
-        RenderString(it->GetUnchecked<std::string_view>());
+        RenderString(it->GetUnchecked<nonstd::string_view>());
         break;
     case JsonFloat:
         RenderFloat(it->GetUnchecked<double>());
@@ -423,7 +423,7 @@ void JsonRenderer::RenderUuid(uuid_t const& value)
     m_renderBuffer.SetEndPointer(pch);
 }
 
-void JsonRenderer::RenderString(std::string_view const& value)
+void JsonRenderer::RenderString(nonstd::string_view const& value)
 {
     WriteChar('"');
     for (auto ch : value)
