@@ -419,7 +419,7 @@ nodes.) To add new types in your own project:
   and jsonValue.ConvertTo<T> to work for your types,
   define specializations of JsonImplementType<T> for each of your types.
 */
-enum JsonType : uint32_t
+enum JsonType : uint8_t
 {
     // Numbering for custom types should start at 1. Custom types never have
     // children. Numbering for custom types must not exceed 200.
