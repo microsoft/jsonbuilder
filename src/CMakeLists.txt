@@ -12,9 +12,9 @@ set(JB_PublicHeaders ${PublicHeaderSrcPrefix}/JsonBuilder.h ${PublicHeaderSrcPre
 # Add source to this project's executable.
 add_library(jsonbuilder ${JB_SourceFiles} ${JB_PrivateHeaders} ${JB_PublicHeaders})
 target_include_directories(jsonbuilder PUBLIC ${PROJECT_SOURCE_DIR}/include)
-target_link_libraries(jsonbuilder PUBLIC uuid)
+target_link_libraries(jsonbuilder PUBLIC uuid nonstd::string_view-lite)
+target_compile_features(jsonbuilder PUBLIC cxx_std_11)
 
-set_property(TARGET jsonbuilder PROPERTY CXX_STANDARD 17)
 set_property(TARGET jsonbuilder PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 install(TARGETS jsonbuilder DESTINATION lib)

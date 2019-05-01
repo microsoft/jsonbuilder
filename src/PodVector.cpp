@@ -3,7 +3,7 @@
 
 #include <cassert>
 
-#include "jsonbuilder/JsonBuilder.h"
+#include <jsonbuilder/JsonBuilder.h>
 
 
 namespace jsonbuilder {

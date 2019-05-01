@@ -64,8 +64,8 @@ Error handling:
 #include <inttypes.h>
 #include <math.h>     // isfinite, sqrt
 #include <stdexcept>  // std::invalid_argument
-#include <string_view>
 
+#include <nonstd/string_view.hpp>
 #include <uuid/uuid.h>
 
 
@@ -591,7 +591,7 @@ class JsonValue : private JsonValueBase
     /*
     Gets the name of the value.
     */
-    std::string_view Name() const throw();
+    nonstd::string_view Name() const throw();
 
     /*
     Gets the size of the data of the value, in bytes.
@@ -1009,7 +1009,7 @@ class JsonBuilder
     */
     template<class... NameTys>
     iterator
-    find(std::string_view const& firstName, NameTys const&... additionalNames) throw()
+    find(nonstd::string_view const& firstName, NameTys const&... additionalNames) throw()
     {
         return iterator(
             const_iterator(this, Find(0, firstName, additionalNames...)));
@@ -1024,7 +1024,7 @@ class JsonBuilder
     */
     template<class... NameTys>
     const_iterator
-    find(std::string_view const& firstName, NameTys const&... additionalNames) const
+    find(nonstd::string_view const& firstName, NameTys const&... additionalNames) const
         throw()
     {
         return const_iterator(this, Find(0, firstName, additionalNames...));
@@ -1040,7 +1040,7 @@ class JsonBuilder
     template<class... NameTys>
     iterator find(
         const_iterator const& itParent,
-        std::string_view const& firstName,
+        nonstd::string_view const& firstName,
         NameTys const&... additionalNames) throw()
     {
         ValidateIterator(itParent);
@@ -1058,7 +1058,7 @@ class JsonBuilder
     template<class... NameTys>
     const_iterator find(
         const_iterator const& itParent,
-        std::string_view const& firstName,
+        nonstd::string_view const& firstName,
         NameTys const&... additionalNames) const throw()
     {
         ValidateIterator(itParent);
@@ -1178,7 +1178,7 @@ class JsonBuilder
     iterator AddValue(
         bool front,
         const_iterator const& itParent,
-        std::string_view const& name,
+        nonstd::string_view const& name,
         JsonType type,
         unsigned cbData = 0,
         void const* pbData = nullptr);  // may throw bad_alloc, length_error
@@ -1192,7 +1192,7 @@ class JsonBuilder
     */
     iterator push_front(
         const_iterator const& itParent,
-        std::string_view const& name,
+        nonstd::string_view const& name,
         JsonType type,
         unsigned cbData = 0,
         void const* pbData = nullptr)  // may throw bad_alloc, length_error
@@ -1209,7 +1209,7 @@ class JsonBuilder
     */
     iterator push_back(
         const_iterator const& itParent,
-        std::string_view const& name,
+        nonstd::string_view const& name,
         JsonType type,
         unsigned cbData = 0,
         void const* pbData = nullptr)  // may throw bad_alloc, length_error
@@ -1248,7 +1248,7 @@ class JsonBuilder
     iterator AddValue(
         bool front,
         const_iterator const& itParent,
-        std::string_view const& name,
+        nonstd::string_view const& name,
         T const& data)  // may throw bad_alloc, length_error
     {
         return JsonImplementType<typename std::decay<T>::type>::AddValue(
@@ -1284,7 +1284,7 @@ class JsonBuilder
             decltype(JsonImplementType<typename std::decay<T>::type>::AddValue)>
     iterator push_front(
         const_iterator const& itParent,
-        std::string_view const& name,
+        nonstd::string_view const& name,
         T const& data)  // may throw bad_alloc, length_error
     {
         return JsonImplementType<typename std::decay<T>::type>::AddValue(
@@ -1320,7 +1320,7 @@ class JsonBuilder
             decltype(JsonImplementType<typename std::decay<T>::type>::AddValue)>
     iterator push_back(
         const_iterator const& itParent,
-        std::string_view const& name,
+        nonstd::string_view const& name,
         T const& data)  // may throw bad_alloc, length_error
     {
         return JsonImplementType<typename std::decay<T>::type>::AddValue(
@@ -1346,7 +1346,7 @@ class JsonBuilder
                               // throw bad_alloc.
 
     unsigned
-    FindImpl(Index parentIndex, std::string_view const& name) const throw();
+    FindImpl(Index parentIndex, nonstd::string_view const& name) const throw();
 
     /*
     Adds an unlinked node to the storage vector. The caller must add the new
@@ -1355,7 +1355,7 @@ class JsonBuilder
     uninitialized. If type is JsonArray or JsonObject, cbData must be 0.
     */
     Index CreateValue(
-        std::string_view const& name,
+        nonstd::string_view const& name,
         JsonType type,
         unsigned cbData,
         void const* pbData);  // may throw bad_alloc, length_error
@@ -1365,7 +1365,7 @@ class JsonBuilder
     template<class... NameTys>
     unsigned Find(
         Index parentIndex,
-        std::string_view const& firstName,
+        nonstd::string_view const& firstName,
         NameTys const&... additionalNames) const throw()
     {
         Index childIndex = FindImpl(parentIndex, firstName);
@@ -1536,7 +1536,7 @@ class JsonImplementType
             JsonBuilder& builder,                                         \
             bool front,                                                   \
             JsonConstIterator const& itParent,                            \
-            std::string_view const& name,                                 \
+            nonstd::string_view const& name,                                 \
             T const& data);                                               \
     }
 
@@ -1549,7 +1549,7 @@ class JsonImplementType
             JsonBuilder& builder,                  \
             bool front,                            \
             JsonConstIterator const& itParent,     \
-            std::string_view const& name,          \
+            nonstd::string_view const& name,          \
             T const& data);                        \
     }
 
@@ -1572,7 +1572,7 @@ JSON_DECLARE_JsonImplementType(double, );
 
 JSON_DECLARE_JsonImplementType(std::chrono::system_clock::time_point, );
 JSON_DECLARE_JsonImplementType(UuidStruct, );
-JSON_DECLARE_JsonImplementType(std::string_view, );
+JSON_DECLARE_JsonImplementType(nonstd::string_view, );
 JSON_DECLARE_JsonImplementType_AddValue(std::string);
 JSON_DECLARE_JsonImplementType_AddValue(char);
 
@@ -1584,7 +1584,7 @@ class JsonImplementType<char*>
         JsonBuilder& builder,
         bool front,
         JsonConstIterator const& itParent,
-        std::string_view const& name,
+        nonstd::string_view const& name,
         char const* psz);
 };
 
