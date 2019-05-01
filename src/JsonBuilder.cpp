@@ -1373,8 +1373,6 @@ JsonImplementType<std::chrono::system_clock::time_point>::GetUnchecked(
 
 // JsonUuid
 
-static const UuidStruct k_emptyUuid = {};
-
 IMPLEMENT_AddValue(UuidStruct, sizeof(UuidStruct), &data, JsonUuid)
 
 bool JsonImplementType<UuidStruct>::ConvertTo(
@@ -1391,7 +1389,7 @@ bool JsonImplementType<UuidStruct>::ConvertTo(
     }
     else
     {
-        value = k_emptyUuid;
+        value = UuidStruct();
         success = false;
     }
 
@@ -1406,7 +1404,7 @@ JsonImplementType<UuidStruct>::GetUnchecked(JsonValue const& jsonValue) throw()
 
     return jsonValue.DataSize() == 16 ?
         *static_cast<const UuidStruct*>(jsonValue.Data()) :
-        k_emptyUuid;
+        UuidStruct();
 }
 
 }  // namespace jsonbuilder

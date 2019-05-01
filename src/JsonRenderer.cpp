@@ -145,7 +145,7 @@ unsigned JsonRenderTime(
     char* pBuffer) throw()
 {
     time_t printableTime = std::chrono::system_clock::to_time_t(timePoint);
-    tm timeStruct = {};
+    tm timeStruct = tm();
     gmtime_r(&printableTime, &timeStruct);
 
     auto subsecondDuration =
