@@ -7,13 +7,6 @@
 
 namespace jsonbuilder { namespace JsonInternal {
 
-//
-// TODO:
-// Copied from OS code
-// with a bug fix, since (1 << 32) is undefined in the c standard and evaluates
-// to 1 on some hardware. Try to find a better source or update PodVector.cpp to
-// not rely on this.
-//
 static inline unsigned char
 BitScanReverse(unsigned long* Index, unsigned long Mask)
 {
