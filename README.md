@@ -105,6 +105,12 @@ This project carries a dependency on the uuid library. To develop with this proj
 sudo apt-get install uuid-dev
 ```
 
+## Integration
+
+1. Add this project as a subdirectory in your project, either as a git submodule or copying the code directly.
+2. Add that directory to your top-level CMakeLists.txt with 'add_subdirectory'. This will make the 'jsonbuilder' target available.
+3. Add the 'jsonbuilder' target to the target_link_libraries of any target that will use the JsonBuilder library.
+
 ## Reporting Security Issues
 
 Security issues and bugs should be reported privately, via email, to the
