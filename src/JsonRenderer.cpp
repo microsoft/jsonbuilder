@@ -1,13 +1,12 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-#include <jsonbuilder/JsonRenderer.h>
-
 #include <cassert>
+#include <cmath>
 #include <string>
 
+#include <jsonbuilder/JsonRenderer.h>
 #include <uuid/uuid.h>
-
 
 #define WriteChar(ch) m_renderBuffer.push_back(ch)
 #define WriteChars(pch, cch) m_renderBuffer.append(pch, cch)
@@ -102,7 +101,7 @@ unsigned JsonRenderFloat(double n, char* pBuffer) throw()
 {
     unsigned cch;
 
-    if (isfinite(n))
+    if (std::isfinite(n))
     {
         cch = static_cast<unsigned>(snprintf(pBuffer, 31, "%.17g", n));
         if (cch > 31)
