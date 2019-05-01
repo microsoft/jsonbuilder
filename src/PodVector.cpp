@@ -5,22 +5,15 @@
 
 #include <jsonbuilder/JsonBuilder.h>
 
+namespace jsonbuilder { namespace JsonInternal {
 
-namespace jsonbuilder {
-//
-// TODO:
-// Copied from OS code
-// with a bug fix, since (1 << 32) is undefined in the c standard and evaluates
-// to 1 on some hardware. Try to find a better source or update PodVector.cpp to
-// not rely on this.
-//
 static inline unsigned char
 BitScanReverse(unsigned long* Index, unsigned long Mask)
 {
     if (Mask == 0 || Index == 0)
         return 0;
 
-    unsigned int ii = 0;
+    int ii = 0;
     for (ii = ((sizeof(Mask) * 8) - 1); ii >= 0; --ii)
     {
         unsigned long tempMask = 1 << ii;
@@ -33,7 +26,6 @@ BitScanReverse(unsigned long* Index, unsigned long Mask)
     return (ii >= 0 ? (unsigned char) 1 : (unsigned char) 0);
 }
 
-namespace JsonInternal {
 void PodVectorBase::CheckOffset(size_type index, size_type currentSize) throw()
 {
     (void) index;        // Unreferenced parameter
@@ -119,7 +111,5 @@ void PodVectorBase::Deallocate(void* pb) throw()
         free(pb);
     }
 }
-}  // namespace JsonInternal
-// namespace JsonInternal
 
-}  // namespace jsonbuilder
+}}

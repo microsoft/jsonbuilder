@@ -789,7 +789,6 @@ JsonBuilder::Index JsonBuilder::CreateValue(
     unsigned cbData,
     void const* pbData)
 {
-    assert(type <= 255);
     if (name.size() > 0xffffff)
     {
         throw std::invalid_argument("JsonBuilder - cchName too large");
@@ -812,7 +811,7 @@ JsonBuilder::Index JsonBuilder::CreateValue(
     unsigned const newStorageSize =
         dataIndex + (cbData + StorageSize - 1) / StorageSize;
     auto const pOldStorageData =
-        reinterpret_cast<char const* const>(m_storage.data());
+        reinterpret_cast<char const*>(m_storage.data());
 
     if (newStorageSize <= valueIndex)
     {
@@ -829,7 +828,7 @@ JsonBuilder::Index JsonBuilder::CreateValue(
 
     auto pNameData = reinterpret_cast<char const*>(name.data());
     auto const pNewStorageData =
-        reinterpret_cast<char const* const>(m_storage.data());
+        reinterpret_cast<char const*>(m_storage.data());
     if (pOldStorageData != pNewStorageData && pOldStorageData < pNameData &&
         pNameData < pOldStorageData + (valueIndex * StorageSize))
     {
@@ -841,7 +840,8 @@ JsonBuilder::Index JsonBuilder::CreateValue(
         pNameData = pNewStorageData + (pNameData - pOldStorageData);
     }
 
-    std::memcpy(pValue + 1, pNameData, cchName);
+    // Write into the memory beyond the JsonValue's end
+    std::memcpy(reinterpret_cast<char*>(pValue + 1), pNameData, cchName);
 
     if (IS_COMPOSITE_TYPE(type))
     {
@@ -915,8 +915,8 @@ and i32) aren't perfectly optimal... But they're probably close enough.
     }
 
 #define IMPLEMENT_JsonImplementType(DataType, ValueType)          \
-    IMPLEMENT_AddValue(DataType, sizeof(data), &data, ValueType); \
-    IMPLEMENT_GetUnchecked(DataType, ValueType);                  \
+    IMPLEMENT_AddValue(DataType, sizeof(data), &data, ValueType)  \
+    IMPLEMENT_GetUnchecked(DataType, ValueType)                   \
                                                                   \
     bool JsonImplementType<DataType>::ConvertTo(                  \
         JsonValue const& value, DataType& result) throw()         \
@@ -965,7 +965,7 @@ bool JsonImplementType<bool>::ConvertTo(JsonValue const& value, bool& result) th
     return success;
 }
 
-IMPLEMENT_AddValue(bool, sizeof(data), &data, JsonBool);
+IMPLEMENT_AddValue(bool, sizeof(data), &data, JsonBool)
 
 // JsonUInt
 
@@ -1045,8 +1045,8 @@ static uint64_t GetUncheckedJsonUInt(JsonValue const& value)
     return result;
 }
 
-IMPLEMENT_AddValue(unsigned long long, sizeof(data), &data, JsonUInt);
-IMPLEMENT_GetUnchecked(unsigned long long, JsonUInt);
+IMPLEMENT_AddValue(unsigned long long, sizeof(data), &data, JsonUInt)
+IMPLEMENT_GetUnchecked(unsigned long long, JsonUInt)
 
 template<class T>
 static bool ConvertToJsonUInt(JsonValue const& value, T& result)
@@ -1067,10 +1067,10 @@ static bool ConvertToJsonUInt(JsonValue const& value, T& result)
     return success;
 }
 
-IMPLEMENT_JsonImplementType(unsigned char, JsonUInt);
-IMPLEMENT_JsonImplementType(unsigned short, JsonUInt);
-IMPLEMENT_JsonImplementType(unsigned int, JsonUInt);
-IMPLEMENT_JsonImplementType(unsigned long, JsonUInt);
+IMPLEMENT_JsonImplementType(unsigned char, JsonUInt)
+IMPLEMENT_JsonImplementType(unsigned short, JsonUInt)
+IMPLEMENT_JsonImplementType(unsigned int, JsonUInt)
+IMPLEMENT_JsonImplementType(unsigned long, JsonUInt)
 
 // JsonInt
 
@@ -1150,8 +1150,8 @@ static int64_t GetUncheckedJsonInt(JsonValue const& value)
     return result;
 }
 
-IMPLEMENT_AddValue(signed long long, sizeof(data), &data, JsonInt);
-IMPLEMENT_GetUnchecked(signed long long, JsonInt);
+IMPLEMENT_AddValue(signed long long, sizeof(data), &data, JsonInt)
+IMPLEMENT_GetUnchecked(signed long long, JsonInt)
 
 template<class T>
 static bool ConvertToJsonInt(JsonValue const& value, T& result)
@@ -1175,10 +1175,10 @@ static bool ConvertToJsonInt(JsonValue const& value, T& result)
     return success;
 }
 
-IMPLEMENT_JsonImplementType(signed char, JsonInt);
-IMPLEMENT_JsonImplementType(signed short, JsonInt);
-IMPLEMENT_JsonImplementType(signed int, JsonInt);
-IMPLEMENT_JsonImplementType(signed long, JsonInt);
+IMPLEMENT_JsonImplementType(signed char, JsonInt)
+IMPLEMENT_JsonImplementType(signed short, JsonInt)
+IMPLEMENT_JsonImplementType(signed int, JsonInt)
+IMPLEMENT_JsonImplementType(signed long, JsonInt)
 
 // JsonFloat
 
@@ -1238,7 +1238,7 @@ bool JsonImplementType<double>::ConvertTo(
     return success;
 }
 
-IMPLEMENT_AddValue(double, sizeof(data), &data, JsonFloat);
+IMPLEMENT_AddValue(double, sizeof(data), &data, JsonFloat)
 
 #define GetUncheckedJsonFloat(value) \
     JsonImplementType<double>::GetUnchecked(value)
@@ -1252,7 +1252,7 @@ static bool ConvertToJsonFloat(JsonValue const& value, T& result)
     return success;
 }
 
-IMPLEMENT_JsonImplementType(float, JsonFloat);
+IMPLEMENT_JsonImplementType(float, JsonFloat)
 
 // JsonUtf8
 
@@ -1267,8 +1267,8 @@ JsonIterator JsonImplementType<char*>::AddValue(
         front, itParent, name, JsonUtf8, static_cast<unsigned>(strlen(psz)), psz);
 }
 
-IMPLEMENT_AddValue(char, sizeof(data), &data, JsonUtf8);
-IMPLEMENT_AddValue(std::string, data.size(), data.data(), JsonUtf8);
+IMPLEMENT_AddValue(char, sizeof(data), &data, JsonUtf8)
+IMPLEMENT_AddValue(std::string, data.size(), data.data(), JsonUtf8)
 
 nonstd::string_view
 JsonImplementType<nonstd::string_view>::GetUnchecked(JsonValue const& value) throw()
@@ -1375,7 +1375,7 @@ JsonImplementType<std::chrono::system_clock::time_point>::GetUnchecked(
 
 static const UuidStruct k_emptyUuid = {};
 
-IMPLEMENT_AddValue(UuidStruct, sizeof(UuidStruct), &data, JsonUuid);
+IMPLEMENT_AddValue(UuidStruct, sizeof(UuidStruct), &data, JsonUuid)
 
 bool JsonImplementType<UuidStruct>::ConvertTo(
     JsonValue const& jsonValue,
