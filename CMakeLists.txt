@@ -6,7 +6,7 @@ if (NOT TARGET nonstd::string_view-lite)
     add_subdirectory(external/string-view-lite)
 endif ()
 
-add_compile_options(-Wall -Werror -pedantic)
+add_compile_options(-Wall -Wextra -Werror -pedantic)
 
 add_subdirectory(src)
 

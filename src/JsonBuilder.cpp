@@ -789,7 +789,6 @@ JsonBuilder::Index JsonBuilder::CreateValue(
     unsigned cbData,
     void const* pbData)
 {
-    assert(type <= 255);
     if (name.size() > 0xffffff)
     {
         throw std::invalid_argument("JsonBuilder - cchName too large");
@@ -812,7 +811,7 @@ JsonBuilder::Index JsonBuilder::CreateValue(
     unsigned const newStorageSize =
         dataIndex + (cbData + StorageSize - 1) / StorageSize;
     auto const pOldStorageData =
-        reinterpret_cast<char const* const>(m_storage.data());
+        reinterpret_cast<char const*>(m_storage.data());
 
     if (newStorageSize <= valueIndex)
     {
@@ -829,7 +828,7 @@ JsonBuilder::Index JsonBuilder::CreateValue(
 
     auto pNameData = reinterpret_cast<char const*>(name.data());
     auto const pNewStorageData =
-        reinterpret_cast<char const* const>(m_storage.data());
+        reinterpret_cast<char const*>(m_storage.data());
     if (pOldStorageData != pNewStorageData && pOldStorageData < pNameData &&
         pNameData < pOldStorageData + (valueIndex * StorageSize))
     {
