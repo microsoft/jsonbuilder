@@ -4,10 +4,6 @@
 
 JsonBuilder is a small C++ library for building a space-efficient binary representation of structured data and, when ready, rendering it to JSON. The library offers STL-like syntax for adding and finding data as well as STL-like iterators for efficiently tracking location. JsonBuilder is currently used in production projects at Microsoft.
 
-## Integration
-
-JsonBuilder builds as a static library and requires C++11. The project creates a CMake compatible 'jsonbuilder' target which you can use for linking against the library.
-
 ## Examples
 
 ### Building structured data
@@ -106,6 +102,8 @@ sudo apt-get install uuid-dev
 ```
 
 ## Integration
+
+JsonBuilder builds as a static library and requires C++11. The project creates a CMake compatible 'jsonbuilder' target which you can use for linking against the library.
 
 1. Add this project as a subdirectory in your project, either as a git submodule or copying the code directly.
 2. Add that directory to your top-level CMakeLists.txt with 'add_subdirectory'. This will make the 'jsonbuilder' target available.
