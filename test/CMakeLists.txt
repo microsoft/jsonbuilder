@@ -3,7 +3,6 @@ cmake_minimum_required(VERSION 3.7)
 # Add source to this project's executable.
 add_executable(jsonbuilderTest CatchMain.cpp TestBuilder.cpp TestRenderer.cpp)
 target_compile_features(jsonbuilderTest PRIVATE cxx_std_11)
-target_compile_options(jsonbuilderTest PRIVATE -Wall -Wextra -Werror -pedantic)
 target_link_libraries(jsonbuilderTest PRIVATE jsonbuilder Catch2::Catch2)
 
 include(CTest)
