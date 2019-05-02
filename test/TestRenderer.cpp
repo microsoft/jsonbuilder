@@ -225,18 +225,21 @@ TEST_CASE("JsonRenderer full object", "[renderer]")
     {
         JsonRenderer renderer;
         auto renderString = renderer.Render(b);
-        REQUIRE(
-            renderString ==
-            R"({"obj":{"str":"strval","str2":"str2val"},"arr":[1,2]})");
+
+        const char* expectedString =
+            R"({"obj":{"str":"strval","str2":"str2val"},"arr":[1,2]})";
+
+        REQUIRE(renderString == expectedString);
     }
 
     SECTION("Pretty renderer")
     {
+
         JsonRenderer renderer;
         renderer.Pretty(true);
         auto renderString = renderer.Render(b);
-        REQUIRE(
-            renderString ==
+
+        const char* expectedString =
             R"({
   "obj": {
     "str": "strval",
@@ -246,6 +249,8 @@ TEST_CASE("JsonRenderer full object", "[renderer]")
     1,
     2
   ]
-})");
+})";
+
+        REQUIRE(renderString == expectedString);
     }
 }
