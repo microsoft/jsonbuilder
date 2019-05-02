@@ -129,3 +129,7 @@ For more information see the [Code of Conduct FAQ](https://opensource.microsoft.
 Want to contribute? The team encourages community feedback and contributions. Please follow our [contributing guidelines](CONTRIBUTING.md).
 
 We also welcome [issues submitted on GitHub](https://github.com/Microsoft/JsonBuilder/issues).
+
+## Third Party Notices
+
+Please see our [Third Party Notices](NOTICE.md).
