@@ -777,9 +777,11 @@ void JsonBuilder::EnsureRootExists()
 {
     if (m_storage.empty())
     {
-        unsigned index;
-        index = CreateValue(nonstd::string_view(), JsonObject, 0, nullptr);
-        assert(index == 0);
+        unsigned index = CreateValue(nonstd::string_view(), JsonObject, 0, nullptr);
+        if (index != 0)
+        {
+            std::terminate();
+        }
     }
 }
 
