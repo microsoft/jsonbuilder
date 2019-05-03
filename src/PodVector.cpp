@@ -66,8 +66,11 @@ PodVectorBase::GetNewCapacity(size_type minCapacity, size_type maxCapacity)
     }
     else
     {
-        long unsigned index;
-        BitScanReverse(&index, minCapacity);
+        long unsigned index = 0;
+        if (!BitScanReverse(&index, minCapacity))
+        {
+            std::terminate();
+        }
         cap = static_cast<uint32_t>((2 << index) - 1);
     }
 
