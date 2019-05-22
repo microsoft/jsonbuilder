@@ -427,7 +427,7 @@ void JsonRenderer::RenderString(nonstd::string_view const& value)
     WriteChar('"');
     for (auto ch : value)
     {
-        if (ch >= 0 && ch < 0x20)
+        if (static_cast<unsigned char>(ch) < 0x20)
         {
             // Control character - must be escaped.
             switch (ch)
