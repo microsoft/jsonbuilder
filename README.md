@@ -2,7 +2,7 @@
 
 # JsonBuilder
 
-JsonBuilder is a small C++ library for building a space-efficient binary representation of structured data and, when ready, rendering it to JSON. The library offers STL-like syntax for adding and finding data as well as STL-like iterators for efficiently tracking location. JsonBuilder is currently used in production projects at Microsoft.
+JsonBuilder is a small C++ library for building a space-efficient binary representation of structured data and, when ready, rendering it to JSON. The library offers STL-like syntax for adding and finding data as well as STL-like iterators for efficiently tracking location.
 
 ## Examples
 
@@ -130,6 +130,10 @@ Want to contribute? The team encourages community feedback and contributions. Pl
 
 We also welcome [issues submitted on GitHub](https://github.com/Microsoft/JsonBuilder/issues).
 
-## Third Party Notices
+## Project Status
 
-Please see our [Third Party Notices](NOTICE.md).
+This project is currently in active development.
+
+## Contact
+
+The easiest way to contact us is via the [Issues](https://github.com/microsoft/JsonBuilder/issues) page.
