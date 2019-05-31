@@ -1,4 +1,4 @@
-[![Build Status](https://mscodehub.visualstudio.com/Azile/_apis/build/status/GitHub-JsonBuilder-CI?branchName=master)](https://mscodehub.visualstudio.com/Azile/_build/latest?definitionId=922&branchName=master)
+[![Build Status](https://dev.azure.com/ms/JsonBuilder/_apis/build/status/microsoft.JsonBuilder?branchName=master)](https://dev.azure.com/ms/JsonBuilder/_build/latest?definitionId=148&branchName=master)
 
 # JsonBuilder
 
