@@ -1,10 +1,9 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-#include <jsonbuilder/JsonBuilder.h>
-
 #include <cassert>
 
+#include <jsonbuilder/JsonBuilder.h>
 
 #define StorageSize sizeof(JsonValue::StoragePod)
 #define DataMax 0xf0000000
@@ -463,6 +462,21 @@ JsonBuilder::const_iterator JsonBuilder::cend() const throw()
     return const_iterator(this, 0);
 }
 
+JsonBuilder::iterator JsonBuilder::root() throw()
+{
+    return end();
+}
+
+JsonBuilder::const_iterator JsonBuilder::root() const throw()
+{
+    return end();
+}
+
+JsonBuilder::const_iterator JsonBuilder::croot() const throw()
+{
+    return end();
+}
+
 JsonBuilder::size_type JsonBuilder::buffer_size() const throw()
 {
     return m_storage.size() * StorageSize;
@@ -777,7 +791,8 @@ void JsonBuilder::EnsureRootExists()
 {
     if (m_storage.empty())
     {
-        unsigned index = CreateValue(nonstd::string_view(), JsonObject, 0, nullptr);
+        unsigned index =
+            CreateValue(nonstd::string_view(), JsonObject, 0, nullptr);
         if (index != 0)
         {
             std::terminate();
@@ -812,8 +827,7 @@ JsonBuilder::Index JsonBuilder::CreateValue(
     unsigned const dataIndex = valueIndex + DATA_OFFSET(cchName);
     unsigned const newStorageSize =
         dataIndex + (cbData + StorageSize - 1) / StorageSize;
-    auto const pOldStorageData =
-        reinterpret_cast<char const*>(m_storage.data());
+    auto const pOldStorageData = reinterpret_cast<char const*>(m_storage.data());
 
     if (newStorageSize <= valueIndex)
     {
@@ -829,8 +843,7 @@ JsonBuilder::Index JsonBuilder::CreateValue(
     pValue->m_type = type;
 
     auto pNameData = reinterpret_cast<char const*>(name.data());
-    auto const pNewStorageData =
-        reinterpret_cast<char const*>(m_storage.data());
+    auto const pNewStorageData = reinterpret_cast<char const*>(m_storage.data());
     if (pOldStorageData != pNewStorageData && pOldStorageData < pNameData &&
         pNameData < pOldStorageData + (valueIndex * StorageSize))
     {
@@ -902,7 +915,7 @@ and i32) aren't perfectly optimal... But they're probably close enough.
         JsonBuilder& builder,                                      \
         bool front,                                                \
         JsonConstIterator const& itParent,                         \
-        nonstd::string_view const& name,                              \
+        nonstd::string_view const& name,                           \
         DataType const& data)                                      \
     {                                                              \
         return builder.AddValue(                                   \
@@ -918,10 +931,11 @@ and i32) aren't perfectly optimal... But they're probably close enough.
 
 #define IMPLEMENT_JsonImplementType(DataType, ValueType)          \
     IMPLEMENT_AddValue(DataType, sizeof(data), &data, ValueType)  \
-    IMPLEMENT_GetUnchecked(DataType, ValueType)                   \
+        IMPLEMENT_GetUnchecked(DataType, ValueType)               \
                                                                   \
-    bool JsonImplementType<DataType>::ConvertTo(                  \
-        JsonValue const& value, DataType& result) throw()         \
+            bool                                                  \
+            JsonImplementType<DataType>::ConvertTo(               \
+                JsonValue const& value, DataType& result) throw() \
     {                                                             \
         return ConvertTo##ValueType(value, result);               \
     }
@@ -969,11 +983,11 @@ bool JsonImplementType<bool>::ConvertTo(JsonValue const& value, bool& result) th
 
 IMPLEMENT_AddValue(bool, sizeof(data), &data, JsonBool)
 
-// JsonUInt
+    // JsonUInt
 
-bool JsonImplementType<unsigned long long>::ConvertTo(
-    JsonValue const& value,
-    unsigned long long& result) throw()
+    bool JsonImplementType<unsigned long long>::ConvertTo(
+        JsonValue const& value,
+        unsigned long long& result) throw()
 {
     static double const UnsignedHuge = 18446744073709551616.0;
 
@@ -1048,10 +1062,10 @@ static uint64_t GetUncheckedJsonUInt(JsonValue const& value)
 }
 
 IMPLEMENT_AddValue(unsigned long long, sizeof(data), &data, JsonUInt)
-IMPLEMENT_GetUnchecked(unsigned long long, JsonUInt)
+    IMPLEMENT_GetUnchecked(unsigned long long, JsonUInt)
 
-template<class T>
-static bool ConvertToJsonUInt(JsonValue const& value, T& result)
+        template<class T>
+        static bool ConvertToJsonUInt(JsonValue const& value, T& result)
 {
     unsigned long long implResult;
     bool success;
@@ -1070,15 +1084,15 @@ static bool ConvertToJsonUInt(JsonValue const& value, T& result)
 }
 
 IMPLEMENT_JsonImplementType(unsigned char, JsonUInt)
-IMPLEMENT_JsonImplementType(unsigned short, JsonUInt)
-IMPLEMENT_JsonImplementType(unsigned int, JsonUInt)
-IMPLEMENT_JsonImplementType(unsigned long, JsonUInt)
+    IMPLEMENT_JsonImplementType(unsigned short, JsonUInt)
+        IMPLEMENT_JsonImplementType(unsigned int, JsonUInt)
+            IMPLEMENT_JsonImplementType(unsigned long, JsonUInt)
 
-// JsonInt
+    // JsonInt
 
-bool JsonImplementType<signed long long>::ConvertTo(
-    JsonValue const& value,
-    signed long long& result) throw()
+    bool JsonImplementType<signed long long>::ConvertTo(
+        JsonValue const& value,
+        signed long long& result) throw()
 {
     static double const SignedHuge = 9223372036854775808.0;
 
@@ -1153,10 +1167,10 @@ static int64_t GetUncheckedJsonInt(JsonValue const& value)
 }
 
 IMPLEMENT_AddValue(signed long long, sizeof(data), &data, JsonInt)
-IMPLEMENT_GetUnchecked(signed long long, JsonInt)
+    IMPLEMENT_GetUnchecked(signed long long, JsonInt)
 
-template<class T>
-static bool ConvertToJsonInt(JsonValue const& value, T& result)
+        template<class T>
+        static bool ConvertToJsonInt(JsonValue const& value, T& result)
 {
     signed long long implResult;
     bool success;
@@ -1178,13 +1192,13 @@ static bool ConvertToJsonInt(JsonValue const& value, T& result)
 }
 
 IMPLEMENT_JsonImplementType(signed char, JsonInt)
-IMPLEMENT_JsonImplementType(signed short, JsonInt)
-IMPLEMENT_JsonImplementType(signed int, JsonInt)
-IMPLEMENT_JsonImplementType(signed long, JsonInt)
+    IMPLEMENT_JsonImplementType(signed short, JsonInt)
+        IMPLEMENT_JsonImplementType(signed int, JsonInt)
+            IMPLEMENT_JsonImplementType(signed long, JsonInt)
 
-// JsonFloat
+    // JsonFloat
 
-double JsonImplementType<double>::GetUnchecked(JsonValue const& value) throw()
+    double JsonImplementType<double>::GetUnchecked(JsonValue const& value) throw()
 {
     assert(value.Type() == JsonFloat);
     double result;
@@ -1245,8 +1259,8 @@ IMPLEMENT_AddValue(double, sizeof(data), &data, JsonFloat)
 #define GetUncheckedJsonFloat(value) \
     JsonImplementType<double>::GetUnchecked(value)
 
-template<class T>
-static bool ConvertToJsonFloat(JsonValue const& value, T& result)
+    template<class T>
+    static bool ConvertToJsonFloat(JsonValue const& value, T& result)
 {
     double implResult;
     bool success = JsonImplementType<double>::ConvertTo(value, implResult);
@@ -1256,24 +1270,24 @@ static bool ConvertToJsonFloat(JsonValue const& value, T& result)
 
 IMPLEMENT_JsonImplementType(float, JsonFloat)
 
-// JsonUtf8
+    // JsonUtf8
 
-JsonIterator JsonImplementType<char*>::AddValue(
-    JsonBuilder& builder,
-    bool front,
-    JsonConstIterator const& itParent,
-    nonstd::string_view const& name,
-    char const* psz)
+    JsonIterator JsonImplementType<char*>::AddValue(
+        JsonBuilder& builder,
+        bool front,
+        JsonConstIterator const& itParent,
+        nonstd::string_view const& name,
+        char const* psz)
 {
     return builder.AddValue(
         front, itParent, name, JsonUtf8, static_cast<unsigned>(strlen(psz)), psz);
 }
 
 IMPLEMENT_AddValue(char, sizeof(data), &data, JsonUtf8)
-IMPLEMENT_AddValue(std::string, data.size(), data.data(), JsonUtf8)
+    IMPLEMENT_AddValue(std::string, data.size(), data.data(), JsonUtf8)
 
-nonstd::string_view
-JsonImplementType<nonstd::string_view>::GetUnchecked(JsonValue const& value) throw()
+        nonstd::string_view JsonImplementType<nonstd::string_view>::GetUnchecked(
+            JsonValue const& value) throw()
 {
     assert(value.Type() == JsonUtf8);
     unsigned cb;
@@ -1377,9 +1391,9 @@ JsonImplementType<std::chrono::system_clock::time_point>::GetUnchecked(
 
 IMPLEMENT_AddValue(UuidStruct, sizeof(UuidStruct), &data, JsonUuid)
 
-bool JsonImplementType<UuidStruct>::ConvertTo(
-    JsonValue const& jsonValue,
-    UuidStruct& value) throw()
+    bool JsonImplementType<UuidStruct>::ConvertTo(
+        JsonValue const& jsonValue,
+        UuidStruct& value) throw()
 {
     bool success;
 
