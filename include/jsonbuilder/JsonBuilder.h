@@ -539,9 +539,6 @@ class JsonValue : private JsonValueBase
     so begin(), begin(itParent), end(itParent), and operator++ operations can
     potentially become O(N) if there are a large number of erased or childless
     nodes.
-    
-
-
 
     Note that methods in this class must never return a hidden node -- they
     must return the first non-hidden node after the node they might have
