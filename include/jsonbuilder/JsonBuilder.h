@@ -68,7 +68,6 @@ Error handling:
 #include <nonstd/string_view.hpp>
 #include <uuid/uuid.h>
 
-
 namespace jsonbuilder {
 struct UuidStruct
 {
@@ -540,8 +539,6 @@ class JsonValue : private JsonValueBase
     so begin(), begin(itParent), end(itParent), and operator++ operations can
     potentially become O(N) if there are a large number of erased or childless
     nodes.
-    
-
 
     Note that methods in this class must never return a hidden node -- they
     must return the first non-hidden node after the node they might have
@@ -804,7 +801,7 @@ All other values are leaf nodes in the tree and can store arbitrary data.
 
 The root of the tree is an Object. This object is implicit -- it is always
 present and need not be added by the user. In methods that accept a "parent
-iterator" parameter, use the end() iterator to refer to the root of the tree.
+iterator" parameter, use the root() iterator to refer to the root of the tree.
 */
 class JsonBuilder
 {
@@ -915,6 +912,10 @@ class JsonBuilder
     const_iterator end() const throw();
     const_iterator cend() const throw();
 
+    iterator root() throw();
+    const_iterator root() const throw();
+    const_iterator croot() const throw();
+
     /*
     Returns a pointer to the first element in the backing raw data vector.
     */
@@ -1008,8 +1009,9 @@ class JsonBuilder
     O(n), where n is the total number of children at each level.
     */
     template<class... NameTys>
-    iterator
-    find(nonstd::string_view const& firstName, NameTys const&... additionalNames) throw()
+    iterator find(
+        nonstd::string_view const& firstName,
+        NameTys const&... additionalNames) throw()
     {
         return iterator(
             const_iterator(this, Find(0, firstName, additionalNames...)));
@@ -1536,7 +1538,7 @@ class JsonImplementType
             JsonBuilder& builder,                                         \
             bool front,                                                   \
             JsonConstIterator const& itParent,                            \
-            nonstd::string_view const& name,                                 \
+            nonstd::string_view const& name,                              \
             T const& data);                                               \
     }
 
@@ -1549,7 +1551,7 @@ class JsonImplementType
             JsonBuilder& builder,                  \
             bool front,                            \
             JsonConstIterator const& itParent,     \
-            nonstd::string_view const& name,          \
+            nonstd::string_view const& name,       \
             T const& data);                        \
     }
 

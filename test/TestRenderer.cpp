@@ -213,11 +213,11 @@ TEST_CASE("JsonRenderer full object", "[renderer]")
 {
     JsonBuilder b;
 
-    auto objItr = b.push_back(b.end(), "obj", JsonObject);
+    auto objItr = b.push_back(b.root(), "obj", JsonObject);
     b.push_back(objItr, "str", "strval");
     b.push_back(objItr, "str2", "str2val");
 
-    auto arrItr = b.push_back(b.end(), "arr", JsonArray);
+    auto arrItr = b.push_back(b.root(), "arr", JsonArray);
     b.push_back(arrItr, "useless", 1);
     b.push_back(arrItr, "useless2", 2);
 
@@ -234,7 +234,6 @@ TEST_CASE("JsonRenderer full object", "[renderer]")
 
     SECTION("Pretty renderer")
     {
-
         JsonRenderer renderer;
         renderer.Pretty(true);
         auto renderString = renderer.Render(b);

@@ -243,7 +243,7 @@ void JsonRenderer::IndentSpaces(unsigned value) throw()
 
 nonstd::string_view JsonRenderer::Render(JsonBuilder const& builder)
 {
-    auto itRoot = builder.end();
+    auto itRoot = builder.root();
     m_renderBuffer.clear();
     m_indent = 0;
     RenderStructure(itRoot, true);

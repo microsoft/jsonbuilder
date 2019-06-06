@@ -4,7 +4,6 @@
 #include <catch2/catch.hpp>
 #include <jsonbuilder/JsonBuilder.h>
 
-
 using namespace jsonbuilder;
 
 TEST_CASE("JsonBuilder buffer reserve", "[builder]")
@@ -84,12 +83,12 @@ static void TestInputOutputScalar()
 
     JsonBuilder b;
 
-    b.push_back(b.end(), "", InputLimits::lowest());
-    b.push_back(b.end(), "", InputLimits::min());
-    b.push_back(b.end(), "", InputLimits::max());
-    b.push_back(b.end(), "", OutputLimits::lowest());
-    b.push_back(b.end(), "", OutputLimits::min());
-    b.push_back(b.end(), "", OutputLimits::max());
+    b.push_back(b.root(), "", InputLimits::lowest());
+    b.push_back(b.root(), "", InputLimits::min());
+    b.push_back(b.root(), "", InputLimits::max());
+    b.push_back(b.root(), "", OutputLimits::lowest());
+    b.push_back(b.root(), "", OutputLimits::min());
+    b.push_back(b.root(), "", OutputLimits::max());
 
     REQUIRE_NOTHROW(b.ValidateData());
 
@@ -192,37 +191,37 @@ TEST_CASE("JsonBuilder string push_back")
 
     SECTION("push_back nonstd::string_view")
     {
-        auto itr = b.push_back(b.end(), "", nonstd::string_view{ "ABCDE" });
+        auto itr = b.push_back(b.root(), "", nonstd::string_view{ "ABCDE" });
         REQUIRE(itr->GetUnchecked<nonstd::string_view>() == "ABCDE");
     }
 
     SECTION("push_back std::string")
     {
-        auto itr = b.push_back(b.end(), "", std::string{ "ABCDE" });
+        auto itr = b.push_back(b.root(), "", std::string{ "ABCDE" });
         REQUIRE(itr->GetUnchecked<nonstd::string_view>() == "ABCDE");
     }
 
     SECTION("push_back char")
     {
-        auto itr = b.push_back(b.end(), "", ' ');
+        auto itr = b.push_back(b.root(), "", ' ');
         REQUIRE(itr->GetUnchecked<nonstd::string_view>() == " ");
     }
 
     SECTION("push_back char*")
     {
-        auto itr = b.push_back(b.end(), "", const_cast<char*>("ABC"));
+        auto itr = b.push_back(b.root(), "", const_cast<char*>("ABC"));
         REQUIRE(itr->GetUnchecked<nonstd::string_view>() == "ABC");
     }
 
     SECTION("push_back const char*")
     {
-        auto itr = b.push_back(b.end(), "", static_cast<const char*>("DEF"));
+        auto itr = b.push_back(b.root(), "", static_cast<const char*>("DEF"));
         REQUIRE(itr->GetUnchecked<nonstd::string_view>() == "DEF");
     }
 
     SECTION("push_back const char[]")
     {
-        auto itr = b.push_back(b.end(), "", "HIJ");
+        auto itr = b.push_back(b.root(), "", "HIJ");
         REQUIRE(itr->GetUnchecked<nonstd::string_view>() == "HIJ");
     }
 }
@@ -232,7 +231,7 @@ TEST_CASE("JsonBuilder chrono push_back", "[builder]")
     auto now = std::chrono::system_clock::now();
 
     JsonBuilder b;
-    auto itr = b.push_back(b.end(), "CurrentTime", now);
+    auto itr = b.push_back(b.root(), "CurrentTime", now);
     auto retrieved = itr->GetUnchecked<std::chrono::system_clock::time_point>();
     REQUIRE(retrieved == now);
 }
@@ -243,7 +242,7 @@ TEST_CASE("JsonBuilder uuid push_back", "[builder]")
     uuid_generate(uuid.Data);
 
     JsonBuilder b;
-    auto itr = b.push_back(b.end(), "Uuid", uuid);
+    auto itr = b.push_back(b.root(), "Uuid", uuid);
 
     auto retrieved = itr->GetUnchecked<UuidStruct>();
     REQUIRE(uuid_compare(retrieved.Data, uuid.Data) == 0);
@@ -258,15 +257,15 @@ TEST_CASE("JsonBuilder find", "[builder]")
     REQUIRE(b.find("a1", "a2") == b.end());
 
     // Single object (a1)
-    auto itA1 = b.push_back(b.end(), "a1", JsonObject);
+    auto itA1 = b.push_back(b.root(), "a1", JsonObject);
     REQUIRE(b.find("a1") == itA1);
-    REQUIRE(b.find(b.end(), "a1") == itA1);
+    REQUIRE(b.find(b.root(), "a1") == itA1);
     REQUIRE(b.find("b1") == b.end());
-    REQUIRE(b.find(b.end(), "b1") == b.end());
+    REQUIRE(b.find(b.root(), "b1") == b.end());
     REQUIRE(b.find("a1", "a2") == b.end());
 
     // Second object b2, sibling of a1
-    auto itB1 = b.push_back(b.end(), "b1", JsonObject);
+    auto itB1 = b.push_back(b.root(), "b1", JsonObject);
     REQUIRE(b.find("a1") == itA1);
     REQUIRE(b.find("a1", "a2") == b.end());
     REQUIRE(b.find("b1") == itB1);
@@ -276,7 +275,7 @@ TEST_CASE("JsonBuilder find", "[builder]")
     auto itA1A2 = b.push_back(itA1, "a2", JsonObject);
     REQUIRE(b.find("a1") == itA1);
     REQUIRE(b.find("a1", "a2") == itA1A2);
-    REQUIRE(b.find(b.end(), "a1", "a2") == itA1A2);
+    REQUIRE(b.find(b.root(), "a1", "a2") == itA1A2);
     REQUIRE(b.find("a1", "a2", "a3") == b.end());
     REQUIRE(b.find("b1") == itB1);
     REQUIRE(b.find("c1") == b.end());
@@ -293,8 +292,8 @@ TEST_CASE("JsonBuilder find", "[builder]")
 TEST_CASE("JsonBuilder constructors", "[builder]")
 {
     JsonBuilder b;
-    b.push_back(b.end(), "aname", "ava");
-    b.push_back(b.end(), "bname", "bva");
+    b.push_back(b.root(), "aname", "ava");
+    b.push_back(b.root(), "bname", "bva");
     REQUIRE_NOTHROW(b.ValidateData());
 
     SECTION("Copy constructor")
@@ -329,8 +328,8 @@ TEST_CASE("JsonBuilder constructors", "[builder]")
 TEST_CASE("JsonBuilder erase", "[builder]")
 {
     JsonBuilder b;
-    b.push_back(b.end(), "aname", "ava");
-    b.push_back(b.end(), "bname", "bva");
+    b.push_back(b.root(), "aname", "ava");
+    b.push_back(b.root(), "bname", "bva");
     REQUIRE_NOTHROW(b.ValidateData());
 
     SECTION("erase a single child element")
@@ -338,7 +337,7 @@ TEST_CASE("JsonBuilder erase", "[builder]")
         auto itr = b.erase(b.begin());
         REQUIRE_NOTHROW(b.ValidateData());
         REQUIRE(itr == b.begin());
-        REQUIRE(b.count(b.end()) == 1);
+        REQUIRE(b.count(b.root()) == 1);
     }
 
     SECTION("erase all children")
@@ -365,7 +364,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
 
     SECTION("JsonNull")
     {
-        auto itr = b.push_back(b.end(), "FirstItem", JsonNull);
+        auto itr = b.push_back(b.root(), "FirstItem", JsonNull);
 
         REQUIRE(itr->IsNull());
         REQUIRE(!itr->ConvertTo(bval));
@@ -379,7 +378,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
 
     SECTION("false")
     {
-        auto itr = b.push_back(b.end(), "", false);
+        auto itr = b.push_back(b.root(), "", false);
 
         REQUIRE(itr->GetUnchecked<bool>() == false);
         REQUIRE((itr->ConvertTo(bval) && !bval));
@@ -393,7 +392,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
 
     SECTION("true")
     {
-        auto itr = b.push_back(b.end(), "", true);
+        auto itr = b.push_back(b.root(), "", true);
 
         REQUIRE(itr->GetUnchecked<bool>() == true);
         REQUIRE((itr->ConvertTo(bval) && bval));
@@ -407,7 +406,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
 
     SECTION("int64_t")
     {
-        auto itr = b.push_back(b.end(), "", 123);
+        auto itr = b.push_back(b.root(), "", 123);
 
         REQUIRE(itr->GetUnchecked<int64_t>() == 123);
         REQUIRE(!itr->ConvertTo(bval));
@@ -421,7 +420,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
 
     SECTION("uint64_t")
     {
-        auto itr = b.push_back(b.end(), "", 123u);
+        auto itr = b.push_back(b.root(), "", 123u);
 
         REQUIRE(itr->GetUnchecked<uint64_t>() == 123u);
         REQUIRE(!itr->ConvertTo(bval));
@@ -435,7 +434,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
 
     SECTION("double")
     {
-        auto itr = b.push_back(b.end(), "", 123.0);
+        auto itr = b.push_back(b.root(), "", 123.0);
 
         REQUIRE(itr->GetUnchecked<double>() == 123.0);
         REQUIRE(!itr->ConvertTo(bval));
@@ -449,7 +448,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
 
     SECTION("string")
     {
-        auto itr = b.push_back(b.end(), "", "ABC");
+        auto itr = b.push_back(b.root(), "", "ABC");
 
         REQUIRE(itr->GetUnchecked<nonstd::string_view>() == "ABC");
         REQUIRE(!itr->ConvertTo(bval));
@@ -463,7 +462,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
 
     SECTION("less than int64_t min as double")
     {
-        auto itr = b.push_back(b.end(), "", -9223372036854777856.0);
+        auto itr = b.push_back(b.root(), "", -9223372036854777856.0);
 
         REQUIRE(!itr->ConvertTo(bval));
         REQUIRE((itr->ConvertTo(fval) && fval == -9223372036854777856.0));
@@ -481,7 +480,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
         // applied.
         constexpr int64_t c_int64min = (-9223372036854775807ll - 1);
 
-        auto itr = b.push_back(b.end(), "", c_int64min);
+        auto itr = b.push_back(b.root(), "", c_int64min);
 
         REQUIRE(!itr->ConvertTo(bval));
         REQUIRE((itr->ConvertTo(fval) && fval == -9223372036854775808.0));
@@ -494,7 +493,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
 
     SECTION("-1")
     {
-        auto itr = b.push_back(b.end(), "", -1);
+        auto itr = b.push_back(b.root(), "", -1);
 
         REQUIRE(!itr->ConvertTo(bval));
         REQUIRE((itr->ConvertTo(fval) && fval == -1.0));
@@ -507,7 +506,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
 
     SECTION("0")
     {
-        auto itr = b.push_back(b.end(), "", 0);
+        auto itr = b.push_back(b.root(), "", 0);
 
         REQUIRE(!itr->ConvertTo(bval));
         REQUIRE((itr->ConvertTo(fval) && fval == 0.0));
@@ -520,7 +519,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
 
     SECTION("int64_t max")
     {
-        auto itr = b.push_back(b.end(), "", 9223372036854775807);
+        auto itr = b.push_back(b.root(), "", 9223372036854775807);
 
         REQUIRE(!itr->ConvertTo(bval));
         REQUIRE((itr->ConvertTo(fval) && fval == 9223372036854775807.0));
@@ -533,7 +532,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
 
     SECTION("greater than int64_t max and less than uint64_t max")
     {
-        auto itr = b.push_back(b.end(), "", 9223372036854775808ull);
+        auto itr = b.push_back(b.root(), "", 9223372036854775808ull);
 
         REQUIRE(!itr->ConvertTo(bval));
         REQUIRE((itr->ConvertTo(fval) && fval == 9223372036854775808.0));
@@ -546,7 +545,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
 
     SECTION("greater than int64_t max and less than uint64_t max as double")
     {
-        auto itr = b.push_back(b.end(), "", 9223372036854777856.0);
+        auto itr = b.push_back(b.root(), "", 9223372036854777856.0);
 
         REQUIRE(!itr->ConvertTo(bval));
         REQUIRE((itr->ConvertTo(fval) && fval == 9223372036854777856.0));
@@ -559,7 +558,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
 
     SECTION("uint64_t max")
     {
-        auto itr = b.push_back(b.end(), "", 18446744073709551615ull);
+        auto itr = b.push_back(b.root(), "", 18446744073709551615ull);
 
         REQUIRE(!itr->ConvertTo(bval));
         REQUIRE((itr->ConvertTo(fval) && fval == 18446744073709551615.0));
@@ -572,7 +571,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
 
     SECTION("greater than uint64_t max")
     {
-        auto itr = b.push_back(b.end(), "", 18446744073709551616.0);
+        auto itr = b.push_back(b.root(), "", 18446744073709551616.0);
 
         REQUIRE(!itr->ConvertTo(bval));
         REQUIRE((itr->ConvertTo(fval) && fval == 18446744073709551615.0));
@@ -586,7 +585,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
     SECTION("time")
     {
         auto now = std::chrono::system_clock::now();
-        auto itr = b.push_back(b.end(), "", now);
+        auto itr = b.push_back(b.root(), "", now);
 
         REQUIRE(!itr->ConvertTo(bval));
         REQUIRE(!itr->ConvertTo(fval));
@@ -602,7 +601,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
         UuidStruct uuid;
         uuid_generate(uuid.Data);
 
-        auto itr = b.push_back(b.end(), "", uuid);
+        auto itr = b.push_back(b.root(), "", uuid);
 
         REQUIRE(!itr->ConvertTo(bval));
         REQUIRE(!itr->ConvertTo(fval));
@@ -615,20 +614,3 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
              0 == uuid_compare(uuidval.Data, uuid.Data)));
     }
 }
-// int main()
-// {
-//     JsonBuilder builder;
-//     builder.push_back(builder.end(), "field", 5l);
-//     builder.push_back(builder.end(), "String", "Grandes écoles");
-//     builder.push_back(
-//         builder.end(), "CurrentTime", std::chrono::system_clock::now());
-
-//     JsonRenderer renderer;
-//     renderer.Pretty(true);
-
-//     nonstd::string_view output = renderer.Render(builder);
-
-//     std::cout << output << std::endl;
-
-//     return 0;
-// }
