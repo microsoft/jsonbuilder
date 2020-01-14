@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.7)
 
-project(jsonbuilder)
+project(jsonbuilder VERSION 0.1)
 
 if (NOT TARGET nonstd::string_view-lite)
     add_subdirectory(external/string-view-lite)
