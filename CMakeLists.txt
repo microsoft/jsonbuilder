@@ -8,6 +8,9 @@ endif ()
 
 add_compile_options(-Wall -Wextra -Werror)
 
+list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
+find_package(uuid REQUIRED)
+
 add_subdirectory(src)
 
 # Only include testing stuff if we are the top level
