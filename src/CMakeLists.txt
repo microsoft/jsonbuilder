@@ -17,5 +17,7 @@ target_compile_features(jsonbuilder PUBLIC cxx_std_17)
 
 set_property(TARGET jsonbuilder PROPERTY POSITION_INDEPENDENT_CODE ON)
 
+include(GNUInstallDirs)
+
 install(TARGETS jsonbuilder DESTINATION lib)
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
