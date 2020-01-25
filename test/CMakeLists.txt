@@ -8,5 +8,3 @@ target_link_libraries(jsonbuilderTest PRIVATE jsonbuilder Catch2::Catch2)
 include(CTest)
 include(Catch)
 catch_discover_tests(jsonbuilderTest)
-
-install(TARGETS jsonbuilderTest DESTINATION bin)
