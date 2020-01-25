@@ -1,20 +1,20 @@
 # Output target
 #   uuid::uuid
 
+include(AliasPkgConfigTarget)
+
 # First try and find with PkgConfig
 find_package(PkgConfig QUIET)
 if (PKG_CONFIG_FOUND)
-    pkg_check_modules(UUID REQUIRED IMPORTED_TARGET GLOBAL uuid)
+    pkg_check_modules(UUID REQUIRED IMPORTED_TARGET uuid)
     if (TARGET PkgConfig::UUID)
-        add_library(uuid::uuid ALIAS PkgConfig::UUID)
+        alias_pkg_config_target(uuid::uuid PkgConfig::UUID)
         return()
     endif ()
 endif ()
 
 # If that doesn't work, try again with old fashioned path lookup, with some caching
-if (UUID_INCLUDE_DIR AND UUID_LIBRARY)
-    set(UUID_FIND_QUIETLY TRUE)
-else ()
+if (NOT (UUID_INCLUDE_DIR AND UUID_LIBRARY))
     find_path(UUID_INCLUDE_DIR
         NAMES uuid/uuid.h)
     find_library(UUID_LIBRARY
