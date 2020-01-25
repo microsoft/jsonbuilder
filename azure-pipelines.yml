@@ -1,11 +1,11 @@
 jobs:
   - job: Linux
     pool:
-      vmImage: 'Ubuntu 16.04'
+      vmImage: 'Ubuntu 18.04'
     steps:
     - bash: |
-        sudo apt-get update
-        sudo apt-get install uuid-dev -y
+        sudo apt update
+        sudo apt install uuid-dev -y
       displayName: 'Install dependency packages'
 
     - task: CMake@1
