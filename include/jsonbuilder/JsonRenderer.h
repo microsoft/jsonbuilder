@@ -38,7 +38,7 @@ class JsonRenderer
 
   private:
     RenderBuffer m_renderBuffer;
-    nonstd::string_view m_newLine;
+    std::string_view m_newLine;
     unsigned m_indentSpaces;
     unsigned m_indent;
     bool m_pretty;
@@ -52,7 +52,7 @@ class JsonRenderer
     */
     explicit JsonRenderer(
         bool pretty = false,
-        nonstd::string_view const& newLine = "\n",
+        std::string_view const& newLine = "\n",
         unsigned indentSpaces = 2) throw();
 
     /*
@@ -93,7 +93,7 @@ class JsonRenderer
     Gets the string that is used for newline when Pretty() is true.
     Default value is "\r\n".
     */
-    nonstd::string_view const& NewLine() const throw();
+    std::string_view const& NewLine() const throw();
 
     /*
     Sets the string that is used for newline when Pretty() is true.
@@ -102,7 +102,7 @@ class JsonRenderer
     be valid for as long as the JsonRenderer exists.
     Default value is "\r\n".
     */
-    void NewLine(nonstd::string_view const&) throw();
+    void NewLine(std::string_view const&) throw();
 
     /*
     Gets the number of spaces per indent level. Default value is 2.
@@ -123,7 +123,7 @@ class JsonRenderer
     The returned string_view is valid until the next call to Render or until
     this JsonBuilder is destroyed.
     */
-    nonstd::string_view Render(JsonBuilder const& builder);  // may throw
+    std::string_view Render(JsonBuilder const& builder);  // may throw
                                                           // bad_alloc,
                                                           // length_error
 
@@ -136,7 +136,7 @@ class JsonRenderer
     The returned string_view is valid until the next call to Render or until
     this JsonBuilder is destroyed.
     */
-    nonstd::string_view
+    std::string_view
     Render(JsonBuilder::const_iterator const& it);  // may throw bad_alloc,
                                                     // length_error
 
@@ -206,7 +206,7 @@ class JsonRenderer
     Renders value as a string. Converts pch to utf-8, escapes any control
     characters, and adds quotes around the result. Example output: "String\n"
     */
-    void RenderString(nonstd::string_view const& value);
+    void RenderString(std::string_view const& value);
 
     /*
     If pretty-printing is disabled, has no effect.

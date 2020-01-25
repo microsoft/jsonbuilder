@@ -189,40 +189,40 @@ TEST_CASE("JsonBuilder string push_back")
 {
     JsonBuilder b;
 
-    SECTION("push_back nonstd::string_view")
+    SECTION("push_back std::string_view")
     {
-        auto itr = b.push_back(b.root(), "", nonstd::string_view{ "ABCDE" });
-        REQUIRE(itr->GetUnchecked<nonstd::string_view>() == "ABCDE");
+        auto itr = b.push_back(b.root(), "", std::string_view{ "ABCDE" });
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "ABCDE");
     }
 
     SECTION("push_back std::string")
     {
         auto itr = b.push_back(b.root(), "", std::string{ "ABCDE" });
-        REQUIRE(itr->GetUnchecked<nonstd::string_view>() == "ABCDE");
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "ABCDE");
     }
 
     SECTION("push_back char")
     {
         auto itr = b.push_back(b.root(), "", ' ');
-        REQUIRE(itr->GetUnchecked<nonstd::string_view>() == " ");
+        REQUIRE(itr->GetUnchecked<std::string_view>() == " ");
     }
 
     SECTION("push_back char*")
     {
         auto itr = b.push_back(b.root(), "", const_cast<char*>("ABC"));
-        REQUIRE(itr->GetUnchecked<nonstd::string_view>() == "ABC");
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "ABC");
     }
 
     SECTION("push_back const char*")
     {
         auto itr = b.push_back(b.root(), "", static_cast<const char*>("DEF"));
-        REQUIRE(itr->GetUnchecked<nonstd::string_view>() == "DEF");
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "DEF");
     }
 
     SECTION("push_back const char[]")
     {
         auto itr = b.push_back(b.root(), "", "HIJ");
-        REQUIRE(itr->GetUnchecked<nonstd::string_view>() == "HIJ");
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "HIJ");
     }
 }
 
@@ -303,11 +303,11 @@ TEST_CASE("JsonBuilder constructors", "[builder]")
 
         auto it = copy.begin();
         REQUIRE(it->Name() == "aname");
-        REQUIRE(it->GetUnchecked<nonstd::string_view>() == "ava");
+        REQUIRE(it->GetUnchecked<std::string_view>() == "ava");
 
         ++it;
         REQUIRE(it->Name() == "bname");
-        REQUIRE(it->GetUnchecked<nonstd::string_view>() == "bva");
+        REQUIRE(it->GetUnchecked<std::string_view>() == "bva");
     }
 
     SECTION("Move constructor")
@@ -317,11 +317,11 @@ TEST_CASE("JsonBuilder constructors", "[builder]")
 
         auto it = move.begin();
         REQUIRE(it->Name() == "aname");
-        REQUIRE(it->GetUnchecked<nonstd::string_view>() == "ava");
+        REQUIRE(it->GetUnchecked<std::string_view>() == "ava");
 
         ++it;
         REQUIRE(it->Name() == "bname");
-        REQUIRE(it->GetUnchecked<nonstd::string_view>() == "bva");
+        REQUIRE(it->GetUnchecked<std::string_view>() == "bva");
     }
 }
 
@@ -355,7 +355,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
     int64_t ival;
     uint64_t uval;
     double fval;
-    nonstd::string_view sval;
+    std::string_view sval;
     bool bval;
     std::chrono::system_clock::time_point tval;
     UuidStruct uuidval;
@@ -450,7 +450,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
     {
         auto itr = b.push_back(b.root(), "", "ABC");
 
-        REQUIRE(itr->GetUnchecked<nonstd::string_view>() == "ABC");
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "ABC");
         REQUIRE(!itr->ConvertTo(bval));
         REQUIRE(!itr->ConvertTo(fval));
         REQUIRE(!itr->ConvertTo(ival));

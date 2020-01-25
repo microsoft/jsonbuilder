@@ -73,7 +73,7 @@ for (JsonConstIterator beginItr = colorsItr.begin(), endItr = colorsItr.end();
         beginItr != endItr;
         ++beginItr)
 {
-    auto color = beginItr->GetUnchecked<nonstd::string_view>();
+    auto color = beginItr->GetUnchecked<std::string_view>();
     std::cout << color << std::endl;
 }
 ```
@@ -88,7 +88,7 @@ JsonRenderer renderer;
 renderer.Reserve(2048);
 
 // Render a json builder object to a string
-nonstd::string_view result = renderer.Render(_jsonBuilder);
+std::string_view result = renderer.Render(_jsonBuilder);
 std::string stl_string(result.data(), result.size());
 std::cout << stl_string.c_str() << std::endl;
 ```
