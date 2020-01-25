@@ -2,7 +2,7 @@
 #   uuid::uuid
 
 # First try and find with PkgConfig
-find_package(PkgConfig REQUIRED)
+find_package(PkgConfig QUIET)
 if (PKG_CONFIG_FOUND)
     pkg_check_modules(UUID REQUIRED IMPORTED_TARGET GLOBAL uuid)
     if (TARGET PkgConfig::UUID)
