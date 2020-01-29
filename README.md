@@ -73,7 +73,7 @@ for (JsonConstIterator beginItr = colorsItr.begin(), endItr = colorsItr.end();
         beginItr != endItr;
         ++beginItr)
 {
-    auto color = beginItr->GetUnchecked<nonstd::string_view>();
+    auto color = beginItr->GetUnchecked<std::string_view>();
     std::cout << color << std::endl;
 }
 ```
@@ -88,7 +88,7 @@ JsonRenderer renderer;
 renderer.Reserve(2048);
 
 // Render a json builder object to a string
-nonstd::string_view result = renderer.Render(_jsonBuilder);
+std::string_view result = renderer.Render(_jsonBuilder);
 std::string stl_string(result.data(), result.size());
 std::cout << stl_string.c_str() << std::endl;
 ```
@@ -100,6 +100,9 @@ This project carries a dependency on the uuid library. To develop with this proj
 ```bash
 sudo apt-get install uuid-dev
 ```
+
+If you checkout with submodules, you will receive a version of Catch2 for testing that can be used automatically.  If you do not checkout
+this submodule, the build system will instead search for an installed version of Catch2 and use that.
 
 ## Integration
 

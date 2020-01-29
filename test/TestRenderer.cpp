@@ -169,7 +169,7 @@ TEST_CASE("JsonRenderer JsonNull")
     }
 }
 
-using namespace nonstd::string_view_literals;
+using namespace std::string_view_literals;
 
 TEST_CASE("JsonRenderer JsonTime", "[renderer]")
 {
@@ -180,7 +180,7 @@ TEST_CASE("JsonRenderer JsonTime", "[renderer]")
 
     unsigned cch = JsonRenderTime(epoch, chars);
     REQUIRE(cch == strlen(chars));
-    REQUIRE(chars == "1970-01-01T00:00:00.0000000Z"_sv);
+    REQUIRE(chars == "1970-01-01T00:00:00.0000000Z"sv);
 }
 
 TEST_CASE("JsonRenderer JsonUuid", "[renderer]")
@@ -198,14 +198,14 @@ TEST_CASE("JsonRenderer JsonUuid", "[renderer]")
     {
         unsigned cch = JsonRenderUuid(uuid, chars);
         REQUIRE(cch == strlen(chars));
-        REQUIRE(chars == "00010203-0405-0607-0809-0A0B0C0D0E0F"_sv);
+        REQUIRE(chars == "00010203-0405-0607-0809-0A0B0C0D0E0F"sv);
     }
 
     SECTION("With braces")
     {
         unsigned cch = JsonRenderUuidWithBraces(uuid, chars);
         REQUIRE(cch == strlen(chars));
-        REQUIRE(chars == "{00010203-0405-0607-0809-0A0B0C0D0E0F}"_sv);
+        REQUIRE(chars == "{00010203-0405-0607-0809-0A0B0C0D0E0F}"sv);
     }
 }
 

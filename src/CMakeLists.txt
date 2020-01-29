@@ -1,21 +1,39 @@
 ﻿cmake_minimum_required(VERSION 3.7)
 
-list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
-find_package(uuid REQUIRED)
+add_library(jsonbuilder 
+    JsonBuilder.cpp
+    JsonRenderer.cpp
+    PodVector.cpp)
 
-set(JB_PrivateHeaders)
-set(JB_SourceFiles JsonBuilder.cpp JsonRenderer.cpp PodVector.cpp)
+target_include_directories(jsonbuilder 
+    PUBLIC 
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>)
 
-set(PublicHeaderSrcPrefix ${PROJECT_SOURCE_DIR}/include/jsonbuilder)
-set(JB_PublicHeaders ${PublicHeaderSrcPrefix}/JsonBuilder.h ${PublicHeaderSrcPrefix}/JsonRenderer.h)
-
-# Add source to this project's executable.
-add_library(jsonbuilder ${JB_SourceFiles} ${JB_PrivateHeaders} ${JB_PublicHeaders})
-target_include_directories(jsonbuilder PUBLIC ${PROJECT_SOURCE_DIR}/include)
-target_link_libraries(jsonbuilder PUBLIC uuid nonstd::string_view-lite)
-target_compile_features(jsonbuilder PUBLIC cxx_std_11)
+target_link_libraries(jsonbuilder PUBLIC uuid::uuid)
+target_compile_features(jsonbuilder PUBLIC cxx_std_17)
 
 set_property(TARGET jsonbuilder PROPERTY POSITION_INDEPENDENT_CODE ON)
 
-install(TARGETS jsonbuilder DESTINATION lib)
-install(FILES ${JB_PublicHeaders} DESTINATION include/jsonbuilder)
+include(GNUInstallDirs)
+
+install(TARGETS jsonbuilder 
+    EXPORT jsonbuilder-export
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+add_library(jsonbuilder::jsonbuilder ALIAS jsonbuilder)
+
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+set(JSONBUILDER_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/jsonbuilder)
+
+install(EXPORT jsonbuilder-export
+    FILE jsonbuilderTargets.cmake
+    NAMESPACE jsonbuilder::
+    DESTINATION ${JSONBUILDER_CMAKE_DIR})
+
+install(FILES ${PROJECT_SOURCE_DIR}/cmake/modules/jsonbuilderConfig.cmake
+    DESTINATION ${JSONBUILDER_CMAKE_DIR})
