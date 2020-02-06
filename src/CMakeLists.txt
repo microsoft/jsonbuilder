@@ -14,6 +14,7 @@ target_link_libraries(jsonbuilder PUBLIC uuid::uuid)
 target_compile_features(jsonbuilder PUBLIC cxx_std_17)
 
 set_property(TARGET jsonbuilder PROPERTY POSITION_INDEPENDENT_CODE ON)
+set_property(TARGET jsonbuilder PROPERTY SOVERSION 0)
 
 include(GNUInstallDirs)
 
