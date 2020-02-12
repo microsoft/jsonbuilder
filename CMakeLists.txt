@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.7)
 
-project(jsonbuilder VERSION 0.1)
+project(jsonbuilder VERSION 0.2)
 
 add_compile_options(-Wall -Wextra)
 
