@@ -16,7 +16,7 @@ BitScanReverse(unsigned long* Index, unsigned long Mask)
     int ii = 0;
     for (ii = ((sizeof(Mask) * 8) - 1); ii >= 0; --ii)
     {
-        unsigned long tempMask = 1 << ii;
+        unsigned long tempMask = 1ul << ii;
         if ((Mask & tempMask) != 0)
         {
             *Index = ii;
