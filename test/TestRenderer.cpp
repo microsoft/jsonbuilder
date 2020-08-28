@@ -216,6 +216,8 @@ TEST_CASE("JsonRenderer full object", "[renderer]")
     auto objItr = b.push_back(b.root(), "obj", JsonObject);
     b.push_back(objItr, "str", "strval");
     b.push_back(objItr, "str2", "str2val");
+    b.push_back(objItr, "hugeUintVal", std::numeric_limits<uint64_t>::max());
+    b.push_back(objItr, "mostNegativeIntVal", std::numeric_limits<int64_t>::min());
 
     auto arrItr = b.push_back(b.root(), "arr", JsonArray);
     b.push_back(arrItr, "useless", 1);
@@ -227,7 +229,7 @@ TEST_CASE("JsonRenderer full object", "[renderer]")
         auto renderString = renderer.Render(b);
 
         const char* expectedString =
-            R"({"obj":{"str":"strval","str2":"str2val"},"arr":[1,2]})";
+            R"({"obj":{"str":"strval","str2":"str2val","hugeUintVal":18446744073709551615,"mostNegativeIntVal":-9223372036854775808},"arr":[1,2]})";
 
         REQUIRE(renderString == expectedString);
     }
@@ -242,7 +244,9 @@ TEST_CASE("JsonRenderer full object", "[renderer]")
             R"({
   "obj": {
     "str": "strval",
-    "str2": "str2val"
+    "str2": "str2val",
+    "hugeUintVal": 18446744073709551615,
+    "mostNegativeIntVal": -9223372036854775808
   },
   "arr": [
     1,

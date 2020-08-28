@@ -384,7 +384,7 @@ void JsonRenderer::RenderFloat(double const& value)
 
 void JsonRenderer::RenderInt(long long signed const& value)
 {
-    auto const cchMax = 20u;
+    auto const cchMax = 21u;
     auto pch = m_renderBuffer.GetAppendPointer(cchMax);
 
     // TODO: Why can't we use std::to_wchars when we're using c++17?
@@ -395,7 +395,7 @@ void JsonRenderer::RenderInt(long long signed const& value)
 
 void JsonRenderer::RenderUInt(long long unsigned const& value)
 {
-    auto const cchMax = 20u;
+    auto const cchMax = 21u;
     auto pch = m_renderBuffer.GetAppendPointer(cchMax);
 
     // TODO: Why can't we use std::to_wchars when we're using c++17?
