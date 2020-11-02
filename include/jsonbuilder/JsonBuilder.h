@@ -65,6 +65,7 @@ Error handling:
 #include <math.h>     // isfinite, sqrt
 #include <stdexcept>  // std::invalid_argument
 #include <string_view>
+#include <string>
 
 #include <uuid/uuid.h>
 

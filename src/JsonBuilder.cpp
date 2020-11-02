@@ -1375,8 +1375,9 @@ JsonImplementType<std::chrono::system_clock::time_point>::GetUnchecked(
     if (jsonValue.DataSize() == 8)
     {
         int64_t nanosSinceEpoch = *static_cast<const int64_t*>(jsonValue.Data());
-        return std::chrono::system_clock::time_point{ std::chrono::nanoseconds{
-            nanosSinceEpoch } };
+        std::chrono::nanoseconds nanosAsType = std::chrono::nanoseconds{ nanosSinceEpoch };
+        std::chrono::system_clock::time_point timepointResult{ std::chrono::duration_cast<std::chrono::system_clock::duration>(nanosAsType) };
+        return timepointResult;
     }
     else
     {
