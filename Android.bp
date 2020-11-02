@@ -1,0 +1,44 @@
+cc_defaults {
+    name: "jsonbuilder_defaults",
+}
+
+cc_defaults {
+    name: "jsonbuilder_library_defaults",
+    defaults: ["jsonbuilder_defaults"],
+    proprietary: true,
+}
+
+cc_library_static {
+    name: "libjsonbuilder",
+    defaults: ["jsonbuilder_library_defaults"],
+
+    cflags: [
+        "-Wall",
+        "-Werror",
+        "-Wno-implicit-fallthrough",
+        "-Wno-non-virtual-dtor", // TODO: Issue in JsonRenderer for missing virtual destructor
+        "-fexceptions"
+    ],
+
+    srcs: [
+        "src/JsonBuilder.cpp",
+        "src/JsonRenderer.cpp",
+        "src/PodVector.cpp",
+    ],
+
+    static_libs: [
+        "libext2_uuid",
+    ],
+
+    local_include_dirs: [
+        "include",
+    ],
+
+    export_static_lib_headers: [
+        "libext2_uuid",
+    ],
+
+    export_include_dirs: [
+        "include",
+    ]
+}
