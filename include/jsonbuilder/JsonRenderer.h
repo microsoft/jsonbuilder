@@ -56,6 +56,11 @@ class JsonRenderer
         unsigned indentSpaces = 2) throw();
 
     /*
+    Virtual destructor
+    */
+    virtual ~JsonRenderer() {}
+
+    /*
     Preallocates memory in the rendering buffer (increases capacity).
     */
     void Reserve(size_type cb);  // may throw bad_alloc, length_error
