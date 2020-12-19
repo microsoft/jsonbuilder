@@ -16,7 +16,6 @@ cc_library_static {
         "-Wall",
         "-Werror",
         "-Wno-implicit-fallthrough",
-        "-Wno-non-virtual-dtor", // TODO: Issue in JsonRenderer for missing virtual destructor
         "-fexceptions"
     ],
 
