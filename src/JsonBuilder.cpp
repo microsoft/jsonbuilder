@@ -1,9 +1,10 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-#include <cassert>
-
 #include <jsonbuilder/JsonBuilder.h>
+
+#include <cassert>
+#include <cstring>
 
 #define StorageSize sizeof(JsonValue::StoragePod)
 #define DataMax 0xf0000000
@@ -19,6 +20,10 @@ value.DataIndex = value.Index + DATA_OFFSET(value.cchName).
 #define IS_SPECIAL_TYPE(type) (JsonHidden <= (type))
 #define IS_NORMAL_TYPE(type) ((type) < JsonHidden)
 #define IS_COMPOSITE_TYPE(type) (JsonArray <= (type))
+
+auto constexpr TicksPerSecond = 10'000'000u;
+auto constexpr FileTime1970Ticks = 116444736000000000;
+using ticks = std::chrono::duration<std::int64_t, std::ratio<1, TicksPerSecond>>;
 
 // JsonValue
 
@@ -44,12 +49,12 @@ std::string_view JsonValue::Name() const throw()
     return std::string_view(reinterpret_cast<char const*>(this + 1), m_cchName);
 }
 
-void const* JsonValue::Data(unsigned* pcbData) const throw()
+void const* JsonValue::Data(_Out_opt_ unsigned* pcbData) const throw()
 {
     return const_cast<JsonValue*>(this)->Data(pcbData);
 }
 
-void* JsonValue::Data(unsigned* pcbData) throw()
+void* JsonValue::Data(_Out_opt_ unsigned* pcbData) throw()
 {
     assert(!IS_SPECIAL_TYPE(m_type));  // Can't call Data() on hidden,
     // object, or array values.
@@ -210,11 +215,11 @@ JsonBuilder::Validator::~Validator()
 }
 
 JsonBuilder::Validator::Validator(
-    JsonValue::StoragePod const* pStorage,
+    _In_reads_(cStorage) JsonValue::StoragePod const* pStorage,
     size_type cStorage)
     : m_pStorage(pStorage)
     , m_size(cStorage)
-    , m_pMap(static_cast<unsigned char*>(Reallocate(nullptr, MapSize(cStorage))))
+    , m_pMap(static_cast<unsigned char*>(Allocate(MapSize(cStorage), false)))
 {
     static_assert(
         ValMax <= (1 << MapBits), "Too many ValidationStates for MapBits");
@@ -272,7 +277,7 @@ void JsonBuilder::Validator::Validate()
             {
                 if (pValue->m_cbData > DataMax)
                 {
-                    throw std::invalid_argument("JsonBuilder - corrupt data");
+                    JsonThrowInvalidArgument("JsonBuilder - corrupt data");
                 }
 
                 // Mark Data as tail.
@@ -293,7 +298,7 @@ void JsonBuilder::Validator::Validate()
     if (reinterpret_cast<JsonValue const*>(m_pStorage)->m_cchName != 0 ||
         reinterpret_cast<JsonValue const*>(m_pStorage)->m_type != JsonObject)
     {
-        throw std::invalid_argument("JsonBuilder - corrupt data");
+        JsonThrowInvalidArgument("JsonBuilder - corrupt data");
     }
 
     // Traverse the tree, starting at root.
@@ -319,7 +324,7 @@ void JsonBuilder::Validator::ValidateRecurse(Index parent)
 
     if (pChild->m_type != JsonHidden)
     {
-        throw std::invalid_argument("JsonBuilder - corrupt data");
+        JsonThrowInvalidArgument("JsonBuilder - corrupt data");
     }
 
     // Validate remaining children.
@@ -349,7 +354,7 @@ void JsonBuilder::Validator::UpdateMap(
     char shift = (index % MapPerByte) * MapBits;
     if (m_size <= index || ((m_pMap[i] >> shift) & MapMask) != expectedVal)
     {
-        throw std::invalid_argument("JsonBuilder - corrupt data");
+        JsonThrowInvalidArgument("JsonBuilder - corrupt data");
     }
 
     m_pMap[i] |= newVal << shift;
@@ -379,7 +384,10 @@ JsonBuilder::JsonBuilder(JsonBuilder&& other) throw()
     return;
 }
 
-JsonBuilder::JsonBuilder(void const* pbRawData, size_type cbRawData, bool validateData)
+JsonBuilder::JsonBuilder(
+    _In_reads_bytes_(cbRawData) void const* pbRawData,
+    size_type cbRawData,
+    bool validateData)
     : m_storage(
           static_cast<JsonValue::StoragePod const*>(pbRawData),
           static_cast<unsigned>(cbRawData / StorageSize))
@@ -387,7 +395,7 @@ JsonBuilder::JsonBuilder(void const* pbRawData, size_type cbRawData, bool valida
     if (cbRawData % StorageSize != 0 ||
         cbRawData / StorageSize > StorageVec::max_size())
     {
-        throw std::invalid_argument("cbRawData invalid");
+        JsonThrowInvalidArgument("cbRawData invalid");
     }
     else if (validateData)
     {
@@ -496,7 +504,7 @@ void JsonBuilder::buffer_reserve(size_type cbMinimumCapacity)
 {
     if (cbMinimumCapacity > StorageVec::max_size() * StorageSize)
     {
-        throw std::length_error("requested capacity is too large");
+        JsonThrowLengthError("requested capacity is too large");
     }
     auto const cItems = (cbMinimumCapacity + StorageSize - 1) / StorageSize;
     m_storage.reserve(static_cast<unsigned>(cItems));
@@ -673,7 +681,7 @@ JsonBuilder::iterator JsonBuilder::AddValue(
     std::string_view const& name,
     JsonType type,
     unsigned cbData,
-    void const* pbData)
+    _In_reads_bytes_(cbData) void const* pbData)
 {
     ValidateIterator(itParent);
     EnsureRootExists();
@@ -804,16 +812,16 @@ JsonBuilder::Index JsonBuilder::CreateValue(
     std::string_view const& name,
     JsonType type,
     unsigned cbData,
-    void const* pbData)
+    _In_reads_bytes_(cbData) void const* pbData)
 {
     if (name.size() > 0xffffff)
     {
-        throw std::invalid_argument("JsonBuilder - cchName too large");
+        JsonThrowLengthError("JsonBuilder - cchName too large");
     }
 
     if (cbData > DataMax)
     {
-        throw std::invalid_argument("JsonBuilder - cbValue too large");
+        JsonThrowLengthError("JsonBuilder - cbValue too large");
     }
 
     if (IS_COMPOSITE_TYPE(type))
@@ -831,7 +839,7 @@ JsonBuilder::Index JsonBuilder::CreateValue(
 
     if (newStorageSize <= valueIndex)
     {
-        throw std::invalid_argument("JsonBuilder - too much data");
+        JsonThrowLengthError("JsonBuilder - too much data");
     }
 
     m_storage.resize(newStorageSize);
@@ -1274,14 +1282,11 @@ JsonIterator JsonImplementType<char*>::AddValue(
     bool front,
     JsonConstIterator const& itParent,
     std::string_view const& name,
-    char const* psz)
+    _In_z_ char const* psz)
 {
     return builder.AddValue(
         front, itParent, name, JsonUtf8, static_cast<unsigned>(strlen(psz)), psz);
 }
-
-IMPLEMENT_AddValue(char, sizeof(data), &data, JsonUtf8);
-IMPLEMENT_AddValue(std::string, data.size(), data.data(), JsonUtf8);
 
 std::string_view
 JsonImplementType<std::string_view>::GetUnchecked(JsonValue const& value) throw()
@@ -1337,13 +1342,9 @@ JsonIterator JsonImplementType<std::chrono::system_clock::time_point>::AddValue(
     std::string_view const& name,
     std::chrono::system_clock::time_point const& data)
 {
-    std::chrono::nanoseconds nanosSinceEpoch =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(
-            data.time_since_epoch());
-
-    int64_t nanosInt64 = nanosSinceEpoch.count();
-    return builder.AddValue(
-        front, itParent, name, JsonTime, sizeof(nanosInt64), &nanosInt64);
+    auto const ft = FileTime1970Ticks + std::chrono::duration_cast<ticks>(data.time_since_epoch()).count();
+    auto const timeStruct = TimeStruct::FromValue(ft);
+    return builder.AddValue(front, itParent, name, JsonTime, sizeof(timeStruct), &timeStruct);
 }
 
 bool JsonImplementType<std::chrono::system_clock::time_point>::ConvertTo(
@@ -1371,18 +1372,54 @@ JsonImplementType<std::chrono::system_clock::time_point>::GetUnchecked(
     JsonValue const& jsonValue) throw()
 {
     assert(jsonValue.Type() == JsonTime);
-    assert(jsonValue.DataSize() == 8);
-    if (jsonValue.DataSize() == 8)
+    assert(jsonValue.DataSize() == sizeof(TimeStruct));
+    if (jsonValue.DataSize() == sizeof(TimeStruct))
     {
-        int64_t nanosSinceEpoch = *static_cast<const int64_t*>(jsonValue.Data());
-        std::chrono::nanoseconds nanosAsType = std::chrono::nanoseconds{ nanosSinceEpoch };
-        std::chrono::system_clock::time_point timepointResult{ std::chrono::duration_cast<std::chrono::system_clock::duration>(nanosAsType) };
-        return timepointResult;
+        auto constexpr SystemClock1970Ticks = -std::chrono::duration_cast<ticks>(
+            std::chrono::system_clock::time_point().time_since_epoch()
+            ).count();
+        auto const ft = jsonValue.GetUnchecked<TimeStruct>().Value();
+        auto const ticksSinceEpoch = ticks(ft + (SystemClock1970Ticks - FileTime1970Ticks));
+        return std::chrono::system_clock::time_point(ticksSinceEpoch);
     }
     else
     {
         return {};
     }
+}
+
+IMPLEMENT_AddValue(TimeStruct, sizeof(TimeStruct), &data, JsonTime);
+
+bool JsonImplementType<TimeStruct>::ConvertTo(
+    JsonValue const& jsonValue,
+    TimeStruct& value) throw()
+{
+    bool success;
+
+    if (jsonValue.Type() == JsonTime)
+    {
+        assert(jsonValue.DataSize() == sizeof(TimeStruct));
+        value = *static_cast<const TimeStruct*>(jsonValue.Data());
+        success = true;
+    }
+    else
+    {
+        value = TimeStruct();
+        success = false;
+    }
+
+    return success;
+}
+
+TimeStruct
+JsonImplementType<TimeStruct>::GetUnchecked(JsonValue const& jsonValue) throw()
+{
+    assert(jsonValue.Type() == JsonTime);
+    assert(jsonValue.DataSize() == sizeof(TimeStruct));
+
+    return jsonValue.DataSize() == sizeof(TimeStruct) ?
+        *static_cast<const TimeStruct*>(jsonValue.Data()) :
+        TimeStruct();
 }
 
 // JsonUuid
@@ -1397,7 +1434,7 @@ bool JsonImplementType<UuidStruct>::ConvertTo(
 
     if (jsonValue.Type() == JsonUuid)
     {
-        assert(jsonValue.DataSize() == 16);
+        assert(jsonValue.DataSize() == sizeof(UuidStruct));
         value = *static_cast<const UuidStruct*>(jsonValue.Data());
         success = true;
     }
@@ -1410,15 +1447,16 @@ bool JsonImplementType<UuidStruct>::ConvertTo(
     return success;
 }
 
-UuidStruct
+UuidStruct const&
 JsonImplementType<UuidStruct>::GetUnchecked(JsonValue const& jsonValue) throw()
 {
     assert(jsonValue.Type() == JsonUuid);
-    assert(jsonValue.DataSize() == 16);
+    assert(jsonValue.DataSize() == sizeof(UuidStruct));
 
-    return jsonValue.DataSize() == 16 ?
+    static constexpr UuidStruct emptyUuid = { 0 };
+    return jsonValue.DataSize() == sizeof(UuidStruct) ?
         *static_cast<const UuidStruct*>(jsonValue.Data()) :
-        UuidStruct();
+        emptyUuid;
 }
 
 }  // namespace jsonbuilder

@@ -1,9 +1,14 @@
-cmake_minimum_required(VERSION 3.7)
+cmake_minimum_required(VERSION 3.15)
 
-# Add source to this project's executable.
+set(LIB_TARGET_UUID)
+if(NOT WIN32)
+    find_package(uuid REQUIRED)
+    set(LIB_TARGET_UUID uuid)
+endif()
+
 add_executable(jsonbuilderTest CatchMain.cpp TestBuilder.cpp TestRenderer.cpp)
 target_compile_features(jsonbuilderTest PRIVATE cxx_std_17)
-target_link_libraries(jsonbuilderTest PRIVATE jsonbuilder Catch2::Catch2)
+target_link_libraries(jsonbuilderTest PRIVATE jsonbuilder Catch2::Catch2 ${LIB_TARGET_UUID})
 
 include(CTest)
 include(Catch)

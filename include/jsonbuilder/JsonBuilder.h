@@ -26,7 +26,7 @@ JsonBuilder design decisions:
 - Less-optimized for searching through payloads, i.e. items are not indexed.
   For example, finding a value with a particular name means iterating through
   all of the parent's children and checking each child for a matching name.
-- Nodes in the tree are one of two types. Simple nodes contain typed values
+- Nodes in the tree are Simple or Complex. Simple nodes contain typed values
   (type tag plus binary data) but have no children. Complex nodes contain no
   data but may have child nodes.
 - Simple nodes support arbitrary binary payloads. Any type of data can be
@@ -36,44 +36,88 @@ JsonBuilder design decisions:
   JsonRenderer class and the convenience methods have built-in support for data
   stored as signed-integer (1, 2, 4, or 8 bytes), unsigned-integer (1, 2, 4, or
   8 bytes), floating-point (4 or 8 bytes), boolean (true/false), null, time
-  (FILETIME), UUID (GUID), and string (utf-16). The convenience methods and the
-  renderer can be extended if other types are needed.
+  (in 100ns units since 1601, i.e. Windows FILETIME), UUID (big-endian order),
+  and string (UTF-8). The convenience methods and the renderer can be extended
+  if other types are needed.
 - Complex nodes come in two types: Object and Array. The JsonBuilder itself
   makes no distinction between these two types (they have identical behavior)
   but it is intended that the Object type contain named values (i.e. it is a
   dictionary with string keys) and that the Array type contain anonymous values
   (i.e. it is a list).
-- Value name limited to 16M utf-16 characters per value.
+- Value name limited to 16M bytes (UTF-8) per value.
 - Value data limited to 3GB per value.
-- Names are stored as utf-16.
-- Memory usage for object and array values is (in bytes):
+- Names are stored as UTF-8.
+- Memory usage for Complex (object and array) values is (in bytes):
   20 + sizeof(name) + padding to a multiple of 4.
-- Memory usage for all other values is (in bytes):
+- Memory usage for Simple (all other) values is (in bytes):
   12 + sizeof(name) + sizeof(data) + padding to multiple of 4.
 - Total storage limited to 16GB per JsonBuilder (or available VA space).
 
 Error handling:
 
-    Throw std::exception variants
+- Some functions may throw std::bad_alloc for memory allocation failure or
+  std::length_error if a size limit is exceeded.
+- Some functions may assert for precondition violation.
+- JsonBuilder uses JsonThrowBadAlloc(), JsonThrowLengthError(), and
+  JsonThrowInvalidArgument() functions to raise exceptions. The
+  library-provided implementations simply throw the corresponding exception
+  (e.g. std::bad_alloc). If necessary, you can override these at link time in
+  your own project by providing implementations as follows:
+
+#include <jsonbuilder/JsonBuilder.h>
+namespace jsonbuilder
+{
+    [[noreturn]] void _jsonbuilderDecl JsonThrowBadAlloc() noexcept(false)
+    {
+        throw MyBadAllocException();
+    }
+    [[noreturn]] void _jsonbuilderDecl JsonThrowLengthError(const char* what) noexcept(false)
+    {
+        throw MyLengthErrorException(what);
+    }
+    [[noreturn]] void _jsonbuilderDecl JsonThrowInvalidArgument(const char* what) noexcept(false)
+    {
+        throw MyInvalidArgumentException(what);
+    }
+}
 */
 
 #pragma once
-#include <algorithm>  // std::min
-#include <chrono>
-#include <cstring>
-#include <inttypes.h>
-#include <math.h>     // isfinite, sqrt
-#include <stdexcept>  // std::invalid_argument
-#include <string_view>
-#include <string>
 
-#include <uuid/uuid.h>
+#include <chrono>       // std::chrono::system_clock::time_point
+#include <iterator>     // std::forward_iterator_tag
+#include <string_view>  // std::string_view
+#include <type_traits>  // std::decay
+
+#ifdef _WIN32
+#include <sal.h>
+#endif
+#ifndef _In_z_
+#define _In_z_
+#endif
+#ifndef _In_reads_
+#define _In_reads_(c)
+#endif
+#ifndef _In_reads_bytes_
+#define _In_reads_bytes_(cb)
+#endif
+#ifndef _Out_opt_
+#define _Out_opt_
+#endif
+#ifndef _Out_writes_bytes_
+#define _Out_writes_bytes_(cb)
+#endif
+
+// _jsonbuilderDecl - calling convention used by free functions:
+#ifndef _jsonbuilderDecl
+#ifdef _WIN32
+#define _jsonbuilderDecl __stdcall
+#else
+#define _jsonbuilderDecl
+#endif
+#endif // _jsonbuilderDecl
 
 namespace jsonbuilder {
-struct UuidStruct
-{
-    uuid_t Data;
-};
 
 // Forward declarations
 
@@ -82,32 +126,45 @@ class JsonBuilder;
 template<class T>
 class JsonImplementType;
 
+// Default implementation throws std::bad_alloc.
+// Can be replaced at link time.
+[[noreturn]] void _jsonbuilderDecl JsonThrowBadAlloc() noexcept(false);
+
+// Default implementation throws std::length_error.
+// Can be replaced at link time.
+[[noreturn]] void _jsonbuilderDecl JsonThrowLengthError(_In_z_ const char* what) noexcept(false);
+
+// Default implementation throws std::invalid_argument.
+// Can be replaced at link time.
+[[noreturn]] void _jsonbuilderDecl JsonThrowInvalidArgument(_In_z_ const char* what) noexcept(false);
+
 // Internal implementation details
 
 namespace JsonInternal {
+
+using JSON_UINT32 = decltype(0xFFFFFFFFu);
+using JSON_UINT64 = decltype(0xFFFFFFFFFFFFFFFFu);
+using JSON_SIZE_T = decltype(sizeof(0));
+using JSON_PTRDIFF_T = decltype((char*)0 - (char*)0);
+
+static_assert(sizeof(JSON_UINT32) == 4, "Bad UINT32");
+static_assert(sizeof(JSON_UINT64) == 8, "Bad UINT64");
+
 /*
 PodVector:
 
-Very simple vector class. For POD types only. Has the following performance
-advantages over std::vector:
+Very simple vector class. For POD types only.
 
-- This vector uses HeapReAlloc to grow its buffer. In cases where the
-  HeapReAlloc can grow in-place, this avoids the overhead of allocating a
-  new buffer, copying the data to the new buffer, and freeing the old
-  buffer.
-- This vector does not initialize data on resize unless specifically requested.
-
+This vector does not initialize data on resize unless specifically requested.
 In benchmarks, using PodVector instead of VC2013's std::vector improves
 JsonBuilder and JsonRenderer performance by about 10%.
-
-In addition, using our own vector avoids creating a hard dependency on STL,
-which can make it easier for customers to consume this library.
 */
 
 class PodVectorBase
 {
-  protected:
-    typedef unsigned size_type;
+protected:
+
+    using size_type = JSON_UINT32;
 
     /*
     assert(index < currentSize)
@@ -130,7 +187,10 @@ class PodVectorBase
     /*
     memcpy(pDest, pSource, cb)
     */
-    static void InitData(void* pDest, void const* pSource, size_t cb) throw();
+    static void InitData(
+        _Out_writes_bytes_(cb) void* pDest,
+        _In_reads_bytes_(cb) void const* pSource,
+        JSON_SIZE_T cb) throw();
 
     /*
     Returns a value newCapacity such that minCapacity <= newCapacity <=
@@ -145,15 +205,14 @@ class PodVectorBase
     static size_type GetNewCapacity(size_type minCapacity, size_type maxCapacity);
 
     /*
-    Calls HeapAlloc or HeapReAlloc. If allocation fails, throw bad_alloc.
+    Calls malloc. If allocation fails, throw bad_alloc.
     */
-    static void* Reallocate(
-        void* pb,
-        size_t cb,
-        bool zeroInitializeMemory = false);  // may throw bad_alloc, length_error
+    static void* Allocate(
+        JSON_SIZE_T cb,
+        bool zeroInitializeMemory);  // may throw bad_alloc, length_error
 
     /*
-    Calls HeapFree.
+    Calls free.
     */
     static void Deallocate(void* pb) throw();
 };
@@ -162,9 +221,9 @@ template<class T>
 class PodVector : private PodVectorBase
 {
     static size_type const
-        m_maxSize = ~size_t(0) / sizeof(T) > size_type(~size_type(1)) ?
+        m_maxSize = ~JSON_SIZE_T(0) / sizeof(T) > size_type(~size_type(1)) ?
         size_type(~size_type(1)) :
-        ~size_t(0) / sizeof(T);
+        ~JSON_SIZE_T(0) / sizeof(T);
     static_assert(
         m_maxSize < size_type(m_maxSize + 1),
         "Bad calculation of m_maxSize (1)");
@@ -209,8 +268,7 @@ class PodVector : private PodVectorBase
         if (m_size != 0)
         {
             auto cb = m_size * sizeof(T);
-            m_data =
-                static_cast<T*>(Reallocate(nullptr, cb, m_zeroInitializeMemory));
+            m_data = static_cast<T*>(Allocate(cb, m_zeroInitializeMemory));
             InitData(m_data, other.m_data, cb);
         }
     }
@@ -226,8 +284,7 @@ class PodVector : private PodVectorBase
         if (m_size != 0)
         {
             auto cb = m_size * sizeof(T);
-            m_data =
-                static_cast<T*>(Reallocate(nullptr, cb, m_zeroInitializeMemory));
+            m_data = static_cast<T*>(Allocate(cb, m_zeroInitializeMemory));
             InitData(m_data, data, cb);
         }
     }
@@ -386,9 +443,11 @@ class PodVector : private PodVectorBase
 
     void GrowTo(size_type minCapacity)  // may throw bad_alloc, length_error
     {
-        size_type const newCapacity = GetNewCapacity(minCapacity, m_maxSize);
-        m_data = static_cast<T*>(Reallocate(
-            m_data, newCapacity * sizeof(T), m_zeroInitializeMemory));
+        auto const newCapacity = GetNewCapacity(minCapacity, m_maxSize);
+        auto const newData = static_cast<T*>(Allocate(newCapacity * sizeof(T), m_zeroInitializeMemory));
+        InitData(newData, m_data, m_size * sizeof(T));
+        Deallocate(m_data);
+        m_data = newData;
         m_capacity = newCapacity;
     }
 };
@@ -419,21 +478,23 @@ nodes.) To add new types in your own project:
   and jsonValue.ConvertTo<T> to work for your types,
   define specializations of JsonImplementType<T> for each of your types.
 */
-enum JsonType : uint8_t
+enum JsonType
+    : JsonInternal::JSON_UINT32 // Note: Used as an 8-bit bitfield of UINT32.
 {
     // Numbering for custom types should start at 1. Custom types never have
     // children. Numbering for custom types must not exceed 200.
     JsonTypeReserved = 201,
     JsonTypeBuiltIn = 244,
-    JsonUtf8,    // No children. Data = utf-8 string.
-    JsonUInt,    // No children. Data = uint (1, 2, 4, or 8 bytes).
-    JsonInt,     // No children. Data = int (1, 2, 4, or 8 bytes).
-    JsonFloat,   // No children. Data = float (4 or 8 bytes).
-    JsonBool,    // No children. Data = bool (1 or 4 bytes).
-    JsonTime,    // No children. Data = uint64 (number of 100ns intervals since
-                 // 1601-01-01T00:00:00Z, i.e. Win32 FILETIME).
+    JsonUtf8,    // No children. Data = UTF-8 string.
+    JsonUInt,    // No children. Data = uint (1, 2, 4, or 8 bytes, little-endian).
+    JsonInt,     // No children. Data = int (1, 2, 4, or 8 bytes, little-endian).
+    JsonFloat,   // No children. Data = float (4 or 8 bytes, little-endian).
+    JsonBool,    // No children. Data = bool (1 or 4 bytes, little-endian).
+    JsonTime,    // No children. Data = int64 (number of 100ns intervals since
+                 // 1601-01-01T00:00:00Z, compatible with Win32 FILETIME).
     JsonUuid,    // No children. Data = UUID (16 bytes universally unique
-                 // identifier, i.e. Win32 GUID).
+                 // identifier, network byte order, compatible with uuid_t,
+                 // NOT the same byte order as Windows GUID).
     JsonNull,    // No children. Data = void (0 bytes).
     JsonHidden,  // An erased or sentinel value. No data. (Calling Data() on a
                  // hidden value is an error.)
@@ -451,13 +512,14 @@ Used for hidden erased or sentinel nodes, which do not need m_cbData.
 */
 class JsonValueBase
 {
+    using JSON_UINT32 = JsonInternal::JSON_UINT32;
     friend class JsonBuilder;
     friend class JsonValue;
-    typedef uint32_t Index;
+    using Index = JSON_UINT32;
 
     Index m_nextIndex;  // The index of the "next" node. (Nodes form a
                         // singly-linked list).
-    uint32_t m_cchName : 24;
+    JSON_UINT32 m_cchName : 24;
     JsonType m_type : 8;
 };
 
@@ -466,7 +528,7 @@ Each value in a JsonBuilder is represented as a JsonValue. Each JsonValue
 stores:
 
 - Type - a value from the JsonType enumeration, or a custom type.
-- Name - utf-16 string, up to 16M characters.
+- Name - UTF-8 string, up to 16M bytes.
 - Data - binary blob, up to 3GB.
 
 Note that Object, Array, and hidden values do not contain data.
@@ -477,11 +539,11 @@ array/object.
 class JsonValue : private JsonValueBase
 {
     friend class JsonBuilder;
-    typedef unsigned StoragePod;
+    using StoragePod = JSON_UINT32;
 
     union
     {
-        uint32_t m_cbData;       // Normal node only (not present for sentinel,
+        JSON_UINT32 m_cbData;    // Normal node only (not present for sentinel,
                                  // array, or object)
         Index m_lastChildIndex;  // Array/Object node only (not present for
                                  // sentinel or normal)
@@ -611,7 +673,7 @@ class JsonValue : private JsonValueBase
     Note that hidden, object, and array values do not have data, and it is an
     error to call Data() on a value where Type() is hidden, object, or array.
     */
-    void const* Data(unsigned* pcbData = nullptr) const throw();
+    void const* Data(_Out_opt_ unsigned* pcbData = nullptr) const throw();
 
     /*
     Gets a pointer to the data of the value. The data can be modified, though
@@ -619,7 +681,7 @@ class JsonValue : private JsonValueBase
     Note that hidden, object, and array values do not have data, and it is an
     error to call Data() on a value where Type() is hidden, object, or array.
     */
-    void* Data(unsigned* pcbData = nullptr) throw();
+    void* Data(_Out_opt_ unsigned* pcbData = nullptr) throw();
 
     /*
     Returns true if Type==Null.
@@ -646,9 +708,11 @@ class JsonValue : private JsonValueBase
     T must be a supported type. Supported types include:
 
     - For boolean data: bool.
-    - For string data: utl::string_view.
+    - For UTF-8 string data: std::string_view.
     - For integer data: signed and unsigned char, short, int, long, long long.
-    - For float data: float, double, long double.
+    - For float data: float, double.
+    - For time data: TimeStruct, std::chrono::system_clock::time_point.
+    - For UUID data: UuidStruct.
     - Any user-defined type for which JsonImplementType<T>::GetUnchecked exists.
 
     Detailed semantics:
@@ -676,9 +740,11 @@ class JsonValue : private JsonValueBase
     T must be a supported type. Supported types include:
 
     - For boolean data: bool.
-    - For string data: utl::string_view.
+    - For UTF-8 string data: std::string_view.
     - For integer data: signed and unsigned char, short, int, long, long long.
-    - For float data: float, double, long double.
+    - For float data: float, double.
+    - For time data: TimeStruct, std::chrono::system_clock::time_point.
+    - For UUID data: UuidStruct.
     - Any user-defined type for which JsonImplementType<T>::ConvertTo exists.
     */
     template<
@@ -702,7 +768,7 @@ Implementation of JsonBuilder::const_iterator.
 class JsonConstIterator
 {
     friend class JsonBuilder;  // JsonBuilder needs to construct const_iterators.
-    typedef uint32_t Index;
+    using Index = JsonInternal::JSON_UINT32;
 
     JsonBuilder const* m_pContainer;
     Index m_index;
@@ -710,11 +776,11 @@ class JsonConstIterator
     JsonConstIterator(JsonBuilder const* pContainer, Index index) throw();
 
   public:
-    typedef std::forward_iterator_tag iterator_category;
-    typedef JsonValue value_type;
-    typedef std::ptrdiff_t difference_type;
-    typedef JsonValue const* pointer;
-    typedef JsonValue const& reference;
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = JsonValue;
+    using difference_type = JsonInternal::JSON_PTRDIFF_T;
+    using pointer = JsonValue const*;
+    using reference = JsonValue const&;
 
     JsonConstIterator() throw();
 
@@ -831,7 +897,7 @@ class JsonBuilder
         ~Validator();
 
         explicit Validator(
-            JsonValue::StoragePod const* pStorage,
+            _In_reads_(cStorage) JsonValue::StoragePod const* pStorage,
             size_type cStorage);  // may throw bad_alloc
 
         void Validate();  // may throw invalid_argument
@@ -844,13 +910,13 @@ class JsonBuilder
     };
 
   public:
-    typedef JsonValue value_type;
-    typedef JsonValue* pointer;
-    typedef JsonValue const* const_pointer;
-    typedef size_t size_type;
-    typedef int difference_type;
-    typedef JsonIterator iterator;
-    typedef JsonConstIterator const_iterator;
+    using value_type = JsonValue;
+    using pointer = JsonValue*;
+    using const_pointer = JsonValue const*;
+    using size_type = JsonInternal::JSON_SIZE_T;
+    using difference_type = JsonInternal::JSON_PTRDIFF_T;
+    using iterator = JsonIterator;
+    using const_iterator = JsonConstIterator;
 
     /*
     Initializes a new instance of the JsonBuilder class.
@@ -882,7 +948,7 @@ class JsonBuilder
     a memory buffer. Optionally runs ValidateData (i.e. for untrusted input).
     */
     JsonBuilder(
-        void const* pbRawData,
+        _In_reads_bytes_(cbRawData) void const* pbRawData,
         size_type cbRawData,
         bool validateData = true);  // may throw bad_alloc, length_error,
                                     // invalid_argument
@@ -1151,7 +1217,7 @@ class JsonBuilder
         const_iterator const& itNewParent,
         PredTy&& pred) throw()
     {
-        Splice(true, itOldParent, itNewParent, std::forward<PredTy&&>(pred));
+        Splice(true, itOldParent, itNewParent, static_cast<PredTy&&>(pred));
     }
 
     /*
@@ -1166,7 +1232,7 @@ class JsonBuilder
         const_iterator const& itNewParent,
         PredTy&& pred) throw()
     {
-        Splice(false, itOldParent, itNewParent, std::forward<PredTy&&>(pred));
+        Splice(false, itOldParent, itNewParent, static_cast<PredTy&&>(pred));
     }
 
     /*
@@ -1183,7 +1249,7 @@ class JsonBuilder
         std::string_view const& name,
         JsonType type,
         unsigned cbData = 0,
-        void const* pbData = nullptr);  // may throw bad_alloc, length_error
+        _In_reads_bytes_(cbData) void const* pbData = nullptr);  // may throw bad_alloc, length_error
 
     /*
     Creates a new value. Inserts it as the first child of itParent.
@@ -1197,7 +1263,7 @@ class JsonBuilder
         std::string_view const& name,
         JsonType type,
         unsigned cbData = 0,
-        void const* pbData = nullptr)  // may throw bad_alloc, length_error
+        _In_reads_bytes_(cbData) void const* pbData = nullptr)  // may throw bad_alloc, length_error
     {
         return AddValue(true, itParent, name, type, cbData, pbData);
     }
@@ -1214,7 +1280,7 @@ class JsonBuilder
         std::string_view const& name,
         JsonType type,
         unsigned cbData = 0,
-        void const* pbData = nullptr)  // may throw bad_alloc, length_error
+        _In_reads_bytes_(cbData) void const* pbData = nullptr)  // may throw bad_alloc, length_error
     {
         return AddValue(false, itParent, name, type, cbData, pbData);
     }
@@ -1226,11 +1292,11 @@ class JsonBuilder
     Data must be a supported type. Supported types include:
 
     - For boolean data: bool.
-    - For string data: utl::string_view, wchar_t*, __wchar_t.
+    - For UTF-8 string data: std::string_view, char*.
     - For integer data: signed and unsigned char, short, int, long, long long.
-    - For float data: float, double, long double.
-    - For time data: FILETIME.
-    - For UUID data: GUID.
+    - For float data: float, double.
+    - For time data: TimeStruct, std::chrono::system_clock::time_point.
+    - For UUID data: UuidStruct.
     - Any user-defined type for which JsonImplementType<T>::AddValue exists.
 
     We specifically do not support char because the intent is ambiguous.
@@ -1263,11 +1329,11 @@ class JsonBuilder
     Data must be a supported type. Supported types include:
 
     - For boolean data: bool.
-    - For string data: utl::string_view, wchar_t*, __wchar_t.
+    - For UTF-8 string data: std::string_view, char*.
     - For integer data: signed and unsigned char, short, int, long, long long.
-    - For float data: float, double, long double.
-    - For time data: FILETIME.
-    - For UUID data: GUID.
+    - For float data: float, double.
+    - For time data: TimeStruct, std::chrono::system_clock::time_point.
+    - For UUID data: UuidStruct.
     - Any user-defined type for which JsonImplementType<T>::AddValue exists.
 
     We specifically do not support char because the intent is ambiguous.
@@ -1299,11 +1365,11 @@ class JsonBuilder
     Data must be a supported type. Supported types include:
 
     - For boolean data: bool.
-    - For string data: utl::string_view, wchar_t*, __wchar_t.
+    - For UTF-8 string data: std::string_view, char*.
     - For integer data: signed and unsigned char, short, int, long, long long.
-    - For float data: float, double, long double.
-    - For time data: FILETIME.
-    - For UUID data: GUID.
+    - For float data: float, double.
+    - For time data: TimeStruct, std::chrono::system_clock::time_point.
+    - For UUID data: UuidStruct.
     - Any user-defined type for which JsonImplementType<T>::AddValue exists.
 
     We specifically do not support char because the intent is ambiguous.
@@ -1360,7 +1426,7 @@ class JsonBuilder
         std::string_view const& name,
         JsonType type,
         unsigned cbData,
-        void const* pbData);  // may throw bad_alloc, length_error
+        _In_reads_bytes_(cbData) void const* pbData);  // may throw bad_alloc, length_error
 
     unsigned Find(Index parentIndex) const throw() { return parentIndex; }
 
@@ -1479,6 +1545,42 @@ Exchanges the contents of two JsonBuilder objects.
 */
 void swap(JsonBuilder&, JsonBuilder&) throw();
 
+/*
+UUID object, network byte order (big-endian), compatible with uuid_t.
+Does NOT use the same byte order as the Windows GUID type.
+*/
+struct UuidStruct
+{
+    char unsigned Data[16]; // Compatible with uuid_t from libuuid.
+};
+
+/*
+DateTime, number of 100ns intervals since 1601, compatible with Win32 FILETIME.
+*/
+struct TimeStruct
+{
+private:
+    using JSON_UINT32 = JsonInternal::JSON_UINT32;
+    using JSON_UINT64 = JsonInternal::JSON_UINT64;
+
+public:
+
+    JSON_UINT32 Low;
+    JSON_UINT32 High;
+
+    static constexpr TimeStruct
+    FromValue(JSON_UINT64 value) noexcept
+    {
+        return { static_cast<JSON_UINT32>(value), static_cast<JSON_UINT32>(value >> 32) };
+    }
+
+    constexpr JSON_UINT64
+    Value() const noexcept
+    {
+        return (static_cast<JSON_UINT64>(High) << 32) | Low;
+    }
+};
+
 // JsonImplementType
 
 /*
@@ -1506,18 +1608,18 @@ class JsonImplementType
     Specializations of JsonImplementType<T> may implement any or all of the
     following:
 
-    static T GetUnchecked( // return value may be "T" or "const T&" at your
-    discretion. JsonValue const& value);
+    static T // return value may be "T" or "const T&" at your discretion.
+    GetUnchecked(JsonValue const& value);
 
-    static bool ConvertTo(
-        JsonValue const& value,
-        T& result);
+    static bool
+    ConvertTo(JsonValue const& value, T& result);
 
-    static JsonIterator AddValue(
+    static JsonIterator
+    AddValue(
         JsonBuilder& builder,
         bool front,
         JsonConstIterator const& itParent,
-        utl::string_view const& name,
+        std::string_view const& name,
         T data); // data parameter may be "T" or "const T&" at your discretion.
 
     The specialization may leave the method undefined if the given operation
@@ -1572,11 +1674,10 @@ JSON_DECLARE_JsonImplementType(signed long long, );
 JSON_DECLARE_JsonImplementType(float, );
 JSON_DECLARE_JsonImplementType(double, );
 
+JSON_DECLARE_JsonImplementType(TimeStruct, );
 JSON_DECLARE_JsonImplementType(std::chrono::system_clock::time_point, );
-JSON_DECLARE_JsonImplementType(UuidStruct, );
+JSON_DECLARE_JsonImplementType(UuidStruct, const&);
 JSON_DECLARE_JsonImplementType(std::string_view, );
-JSON_DECLARE_JsonImplementType_AddValue(std::string);
-JSON_DECLARE_JsonImplementType_AddValue(char);
 
 template<>
 class JsonImplementType<char*>
@@ -1587,11 +1688,11 @@ class JsonImplementType<char*>
         bool front,
         JsonConstIterator const& itParent,
         std::string_view const& name,
-        char const* psz);
+        _In_z_ char const* psz);
 };
 
 template<>
 class JsonImplementType<char const*> : public JsonImplementType<char*>
 {};
 
-}  // namespace jsonbuilder
+} // namespace jsonbuilder

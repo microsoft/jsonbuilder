@@ -1,12 +1,20 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
+#include <cstring>
 #include <cstdio>
 #include <iterator>
 #include <type_traits>
 
 #include <catch2/catch.hpp>
 #include <jsonbuilder/JsonRenderer.h>
+
+#ifdef _WIN32
+#undef uuid_t
+using uuid_t = char unsigned[16];
+#else
+#include <uuid/uuid.h>
+#endif
 
 using namespace jsonbuilder;
 
@@ -173,20 +181,20 @@ using namespace std::string_view_literals;
 
 TEST_CASE("JsonRenderer JsonTime", "[renderer]")
 {
-    auto epoch = std::chrono::system_clock::from_time_t(0);
+    auto epoch = std::chrono::system_clock::from_time_t(2);
 
     char chars[39];
     memset(chars, 1, sizeof(chars));
 
     unsigned cch = JsonRenderTime(epoch, chars);
     REQUIRE(cch == strlen(chars));
-    REQUIRE(chars == "1970-01-01T00:00:00.0000000Z"sv);
+    REQUIRE(chars == "1970-01-01T00:00:02.0000000Z"sv);
 }
 
 TEST_CASE("JsonRenderer JsonUuid", "[renderer]")
 {
     uuid_t uuid;
-    for (int i = 0; i < 16; i++)
+    for (char unsigned i = 0; i < 16; i++)
     {
         uuid[i] = i;
     }
