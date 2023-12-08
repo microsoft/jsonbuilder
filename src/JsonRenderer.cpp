@@ -1,69 +1,67 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
+#include <jsonbuilder/JsonRenderer.h>
+
+#define __USE_TIME_BITS64
+#include <time.h>
+
 #include <cassert>
 #include <cmath>
-#include <string>
+#include <cstdint>
+#include <cstring>
+#include <charconv>
+#include <limits>
 
-#include <jsonbuilder/JsonRenderer.h>
-#include <uuid/uuid.h>
+static_assert(sizeof(time_t) == 8, "time_t must be 64 bits");
+
+#ifndef _Out_writes_
+#define _Out_writes_(c)
+#endif
 
 #define WriteChar(ch) m_renderBuffer.push_back(ch)
 #define WriteChars(pch, cch) m_renderBuffer.append(pch, cch)
 
+auto constexpr TicksPerSecond = 10'000'000u;
+auto constexpr FileTime1970 = 116444736000000000;
+using ticks = std::chrono::duration<std::int64_t, std::ratio<1, TicksPerSecond>>;
+
 namespace jsonbuilder {
-/*
-Efficiently multiply two 32-bit unsigned integers to get a 64-bit result.
-(The current VC compiler does not optimize this -- if we don't use an
-intrinsic, it makes a call to _aullmul.)
-*/
-#if defined(_M_ARM) || defined(_M_ARM64)
-#    define UMul64(a, b) _arm_umull(a, b)
-#elif defined(_M_IX86) || defined(_M_X64)
-#    define UMul64(a, b) __emulu(a, b)
-#else
-static long long unsigned UMul64(unsigned a, unsigned b)
-{
-    return static_cast<long long unsigned>(a) * b;
-}
-#endif
 
-/*
-    Given a number from 0..15, returns the corresponding uppercase hex digit,
-    i.e. '0'..'F'. Note: it is an error to pass a value larger than 15.
-*/
-static inline constexpr char u4_to_hex_upper(char unsigned _Val4)
+static constexpr unsigned Log10Ceil(unsigned n)
 {
-    return ("0123456789ABCDEF")[_Val4];
+    return n < 10 ? 1 : 1 + Log10Ceil(n / 10);
+}
+
+template<unsigned N>
+static unsigned
+MemCpyFromLiteral(_Out_writes_(N) char* dest, char const (&src)[N]) noexcept
+{
+    memcpy(dest, src, N);
+    return N - 1;
 }
 
 /*
-Multiply two 64-bit unsigned integers to get a 128-bit result. Return the high
-64 bits of the answer.
+Given a number from 0..15, returns the corresponding uppercase hex digit,
+i.e. '0'..'F'. Note: it is an error to pass a value larger than 15.
 */
-__attribute__((unused)) static long long unsigned
-UMul128Hi(long long unsigned a, long long unsigned b)
+static constexpr char u4_to_hex_upper(char unsigned val4)
 {
-#if defined(_M_X64) || defined(_M_ARM64)
-    long long unsigned const high = __umulh(a, b);
-#else
-    long long unsigned const mid =
-        UMul64(static_cast<unsigned>(a), static_cast<unsigned>(b >> 32)) +
-        (UMul64(static_cast<unsigned>(a), static_cast<unsigned>(b)) >> 32);
-    long long unsigned const high =
-        UMul64(static_cast<unsigned>(a >> 32), static_cast<unsigned>(b >> 32)) +
-        (mid >> 32) +
-        ((UMul64(static_cast<unsigned>(a >> 32), static_cast<unsigned>(b)) +
-          static_cast<unsigned>(mid)) >>
-         32);
-#endif
-    return high;
+    assert(val4 < 16);
+    return ("0123456789ABCDEF")[val4];
+}
+
+static unsigned u8_to_hex_upper(char unsigned val8, _Out_writes_(2) char* pch)
+{
+    pch[0] = u4_to_hex_upper((val8 >> 4) & 0xf);
+    pch[1] = u4_to_hex_upper(val8 & 0xf);
+    return 2;
 }
 
 /*
 Formats a uint32 with leading 0s. Always writes cch characters.
 */
-static void FormatUint(unsigned n, char* pch, unsigned cch)
+static void FormatUint(unsigned n, _Out_writes_(cch) char* pch, unsigned cch)
 {
     do
     {
@@ -74,40 +72,45 @@ static void FormatUint(unsigned n, char* pch, unsigned cch)
 }
 
 template<unsigned CB, class N>
-static unsigned JsonRenderXInt(N const& n, char* pBuffer)
+static unsigned JsonRenderXInt(N const& n, _Out_writes_z_(CB) char* pBuffer)
 {
-    // TODO: Why can't we use std::to_wchars when we're using c++17?
-    std::string result = std::to_string(n);
-    std::size_t const cch =
-        std::min(result.size(), static_cast<std::size_t>(CB - 1));
-    strncpy(pBuffer, result.c_str(), cch);
-    pBuffer[cch] = 0;
+    auto const result = std::to_chars(pBuffer, pBuffer + CB - 1, n);
+    unsigned const cch = static_cast<unsigned>(result.ptr - pBuffer);
+    assert(result.ec == std::errc());
+    assert(cch < CB);
 
     pBuffer[cch] = 0;
-    return static_cast<unsigned>(cch);
+    return cch;
 }
 
-unsigned JsonRenderUInt(long long unsigned n, char* pBuffer) throw()
+unsigned JsonRenderUInt(long long unsigned n, _Out_writes_z_(21) char* pBuffer) throw()
 {
     return JsonRenderXInt<21>(n, pBuffer);
 }
 
-unsigned JsonRenderInt(long long signed n, char* pBuffer) throw()
+unsigned JsonRenderInt(long long signed n, _Out_writes_z_(21) char* pBuffer) throw()
 {
     return JsonRenderXInt<21>(n, pBuffer);
 }
 
-unsigned JsonRenderFloat(double n, char* pBuffer) throw()
+unsigned JsonRenderFloat(double n, _Out_writes_z_(32) char* pBuffer) throw()
 {
+    auto const CB = 32u;
     unsigned cch;
 
     if (std::isfinite(n))
     {
-        cch = static_cast<unsigned>(snprintf(pBuffer, 31, "%.17g", n));
-        if (cch > 31)
-        {
-            cch = 31;
-        }
+        // "-1.234e+56\0"
+        auto constexpr cchMax =
+            sizeof("-.e+") + // Non-digit chars, including NUL.
+            std::numeric_limits<double>::max_digits10 +
+            Log10Ceil(std::numeric_limits<double>::max_exponent10);
+        static_assert(cchMax <= CB, "Unexpected max_digits10");
+
+        auto const result = std::to_chars(pBuffer, pBuffer + CB - 1, n);
+        cch = static_cast<unsigned>(result.ptr - pBuffer);
+        assert(result.ec == std::errc());
+        assert(cch < CB);
         pBuffer[cch] = 0;
     }
     else
@@ -118,40 +121,24 @@ unsigned JsonRenderFloat(double n, char* pBuffer) throw()
     return cch;
 }
 
-unsigned JsonRenderBool(bool b, char* pBuffer) throw()
+unsigned JsonRenderBool(bool b, _Out_writes_z_(6) char* pBuffer) throw()
 {
-    unsigned cch;
-    if (b)
-    {
-        strcpy(pBuffer, "true");
-        cch = 4;
-    }
-    else
-    {
-        strcpy(pBuffer, "false");
-        cch = 5;
-    }
-    return cch;
+    return b ? MemCpyFromLiteral(pBuffer, "true") : MemCpyFromLiteral(pBuffer, "false");
 }
 
-unsigned JsonRenderNull(char* pBuffer) throw()
+unsigned JsonRenderNull(_Out_writes_z_(5) char* pBuffer) throw()
 {
-    strcpy(pBuffer, "null");
-    return 4;
+    return MemCpyFromLiteral(pBuffer, "null");
 }
 
-unsigned JsonRenderTime(
-    std::chrono::system_clock::time_point const& timePoint,
-    char* pBuffer) throw()
+static unsigned RenderTicks1970(time_t seconds1970, unsigned subsecondTicks, _Out_writes_z_(29) char* pBuffer) throw()
 {
-    time_t printableTime = std::chrono::system_clock::to_time_t(timePoint);
-    tm timeStruct = tm();
-    gmtime_r(&printableTime, &timeStruct);
-
-    auto subsecondDuration =
-        timePoint.time_since_epoch() % std::chrono::seconds{ 1 };
-    auto subsecondNanos =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(subsecondDuration);
+    tm timeStruct = {};
+#ifdef _WIN32
+    _gmtime64_s(&timeStruct, &seconds1970);
+#else
+    gmtime_r(&seconds1970, &timeStruct);
+#endif
 
     FormatUint(static_cast<unsigned>(timeStruct.tm_year + 1900), pBuffer + 0, 4);
     pBuffer[4] = '-';
@@ -165,20 +152,59 @@ unsigned JsonRenderTime(
     pBuffer[16] = ':';
     FormatUint(static_cast<unsigned>(timeStruct.tm_sec), pBuffer + 17, 2);
     pBuffer[19] = '.';
-    FormatUint(
-        static_cast<unsigned>(subsecondNanos.count() / 100), pBuffer + 20, 7);
+    FormatUint(subsecondTicks, pBuffer + 20, 7);
     pBuffer[27] = 'Z';
     pBuffer[28] = 0;
     return 28;
 }
 
-unsigned JsonRenderUuid(uuid_t const& g, char* pBuffer) throw()
+unsigned JsonRenderTime(
+    TimeStruct const t,
+    _Out_writes_z_(29) char* pBuffer) throw()
 {
-    uuid_unparse_upper(g, pBuffer);
+    auto const ft = t.Value();
+    time_t const seconds = ft / TicksPerSecond;
+    auto const subsecondTicks = static_cast<unsigned>(ft % TicksPerSecond);
+    return RenderTicks1970(seconds + (FileTime1970 / TicksPerSecond), subsecondTicks, pBuffer);
+}
+
+unsigned JsonRenderTime(
+    std::chrono::system_clock::time_point const timePoint,
+    _Out_writes_z_(29) char* pBuffer) throw()
+{
+    auto const ticks1970 = std::chrono::duration_cast<ticks>(timePoint.time_since_epoch()).count();
+    time_t const seconds1970 = ticks1970 / TicksPerSecond;
+    auto const subsecondTicks = static_cast<unsigned>(ticks1970 % TicksPerSecond);
+    return RenderTicks1970(seconds1970, subsecondTicks, pBuffer);
+}
+
+unsigned JsonRenderUuid(_In_reads_(16) char unsigned const* g, _Out_writes_z_(37) char* pBuffer) throw()
+{
+    u8_to_hex_upper(g[0], pBuffer + 0);
+    u8_to_hex_upper(g[1], pBuffer + 2);
+    u8_to_hex_upper(g[2], pBuffer + 4);
+    u8_to_hex_upper(g[3], pBuffer + 6);
+    pBuffer[8] = '-';
+    u8_to_hex_upper(g[4], pBuffer + 9);
+    u8_to_hex_upper(g[5], pBuffer + 11);
+    pBuffer[13] = '-';
+    u8_to_hex_upper(g[6], pBuffer + 14);
+    u8_to_hex_upper(g[7], pBuffer + 16);
+    pBuffer[18] = '-';
+    u8_to_hex_upper(g[8], pBuffer + 19);
+    u8_to_hex_upper(g[9], pBuffer + 21);
+    pBuffer[23] = '-';
+    u8_to_hex_upper(g[10], pBuffer + 24);
+    u8_to_hex_upper(g[11], pBuffer + 26);
+    u8_to_hex_upper(g[12], pBuffer + 28);
+    u8_to_hex_upper(g[13], pBuffer + 30);
+    u8_to_hex_upper(g[14], pBuffer + 32);
+    u8_to_hex_upper(g[15], pBuffer + 34);
+    pBuffer[36] = 0;
     return 36;
 }
 
-unsigned JsonRenderUuidWithBraces(uuid_t const& g, char* pBuffer) throw()
+unsigned JsonRenderUuidWithBraces(_In_reads_(16) char unsigned const* g, _Out_writes_z_(39) char* pBuffer) throw()
 {
     pBuffer[0] = '{';
     JsonRenderUuid(g, pBuffer + 1);
@@ -187,11 +213,16 @@ unsigned JsonRenderUuidWithBraces(uuid_t const& g, char* pBuffer) throw()
     return 38;
 }
 
+JsonRenderer::~JsonRenderer()
+{
+    return;
+}
+
 JsonRenderer::JsonRenderer(
     bool pretty,
-    std::string_view const& newLine,
+    std::string_view newLine,
     unsigned indentSpaces) throw()
-    : m_newLine(newLine), m_indentSpaces(indentSpaces), m_pretty(pretty)
+    : m_newLine(newLine), m_indentSpaces(indentSpaces), m_indent(0), m_pretty(pretty)
 {
     return;
 }
@@ -221,12 +252,12 @@ void JsonRenderer::Pretty(bool value) throw()
     m_pretty = value;
 }
 
-std::string_view const& JsonRenderer::NewLine() const throw()
+std::string_view JsonRenderer::NewLine() const throw()
 {
     return m_newLine;
 }
 
-void JsonRenderer::NewLine(std::string_view const& value) throw()
+void JsonRenderer::NewLine(std::string_view const value) throw()
 {
     m_newLine = value;
 }
@@ -314,7 +345,7 @@ void JsonRenderer::RenderValue(iterator const& it)
         RenderUInt(it->GetUnchecked<long long unsigned>());
         break;
     case JsonTime:
-        RenderTime(it->GetUnchecked<std::chrono::system_clock::time_point>());
+        RenderTime(it->GetUnchecked<TimeStruct>());
         break;
     case JsonUuid:
         RenderUuid(it->GetUnchecked<UuidStruct>().Data);
@@ -375,36 +406,32 @@ void JsonRenderer::RenderStructure(iterator const& itParent, bool showNames)
     WriteChar(showNames ? '}' : ']');
 }
 
-void JsonRenderer::RenderFloat(double const& value)
+void JsonRenderer::RenderFloat(double const value)
 {
     auto pch = m_renderBuffer.GetAppendPointer(32);
     pch += JsonRenderFloat(value, pch);
     m_renderBuffer.SetEndPointer(pch);
 }
 
-void JsonRenderer::RenderInt(long long signed const& value)
+void JsonRenderer::RenderInt(long long signed const value)
 {
     auto const cchMax = 21u;
     auto pch = m_renderBuffer.GetAppendPointer(cchMax);
-
-    // TODO: Why can't we use std::to_wchars when we're using c++17?
-    unsigned cch = static_cast<unsigned>(snprintf(pch, cchMax, "%lld", value));
-    pch += cch > cchMax ? cchMax : cch;
-    m_renderBuffer.SetEndPointer(pch);
+    auto result = std::to_chars(pch, pch + cchMax, value);
+    assert(result.ec == std::errc());
+    m_renderBuffer.SetEndPointer(result.ptr);
 }
 
-void JsonRenderer::RenderUInt(long long unsigned const& value)
+void JsonRenderer::RenderUInt(long long unsigned const value)
 {
     auto const cchMax = 21u;
     auto pch = m_renderBuffer.GetAppendPointer(cchMax);
-
-    // TODO: Why can't we use std::to_wchars when we're using c++17?
-    unsigned cch = static_cast<unsigned>(snprintf(pch, cchMax, "%llu", value));
-    pch += cch > cchMax ? cchMax : cch;
-    m_renderBuffer.SetEndPointer(pch);
+    auto result = std::to_chars(pch, pch + cchMax, value);
+    assert(result.ec == std::errc());
+    m_renderBuffer.SetEndPointer(result.ptr);
 }
 
-void JsonRenderer::RenderTime(std::chrono::system_clock::time_point const& value)
+void JsonRenderer::RenderTime(TimeStruct value)
 {
     auto pch = m_renderBuffer.GetAppendPointer(32);
     *pch++ = '"';
@@ -413,7 +440,7 @@ void JsonRenderer::RenderTime(std::chrono::system_clock::time_point const& value
     m_renderBuffer.SetEndPointer(pch);
 }
 
-void JsonRenderer::RenderUuid(uuid_t const& value)
+void JsonRenderer::RenderUuid(_In_reads_(16) char unsigned const* value)
 {
     auto pch = m_renderBuffer.GetAppendPointer(38);
     *pch++ = '"';
@@ -422,7 +449,7 @@ void JsonRenderer::RenderUuid(uuid_t const& value)
     m_renderBuffer.SetEndPointer(pch);
 }
 
-void JsonRenderer::RenderString(std::string_view const& value)
+void JsonRenderer::RenderString(std::string_view const value)
 {
     WriteChar('"');
     for (auto ch : value)
@@ -458,8 +485,7 @@ void JsonRenderer::RenderString(std::string_view const& value)
                 *p++ = 'u';
                 *p++ = '0';
                 *p++ = '0';
-                *p++ = u4_to_hex_upper((ch >> 4) & 0xf);
-                *p++ = u4_to_hex_upper(ch & 0xf);
+                p += u8_to_hex_upper(ch, p);
                 m_renderBuffer.SetEndPointer(p);
                 break;
             }

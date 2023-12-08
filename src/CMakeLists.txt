@@ -1,7 +1,8 @@
-cmake_minimum_required(VERSION 3.7)
+cmake_minimum_required(VERSION 3.15)
 
 add_library(jsonbuilder 
     JsonBuilder.cpp
+    JsonExceptions.cpp
     JsonRenderer.cpp
     PodVector.cpp)
 
@@ -10,7 +11,6 @@ target_include_directories(jsonbuilder
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>)
 
-target_link_libraries(jsonbuilder PUBLIC uuid::uuid)
 target_compile_features(jsonbuilder PUBLIC cxx_std_17)
 
 set_property(TARGET jsonbuilder PROPERTY POSITION_INDEPENDENT_CODE ON)

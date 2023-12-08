@@ -3,8 +3,26 @@
 
 #include <catch2/catch.hpp>
 #include <jsonbuilder/JsonBuilder.h>
+#include <string.h>
+
+#ifdef _WIN32
+using uuid_t = char unsigned[16];
+static void uuid_generate(uuid_t uuid)
+{
+    for (unsigned i = 0; i != sizeof(uuid_t); i++)
+    {
+        uuid[i] = static_cast<char unsigned>(rand());
+    }
+}
+#else
+#include <uuid/uuid.h>
+#endif
 
 using namespace jsonbuilder;
+
+auto constexpr TicksPerSecond = 10'000'000u;
+auto constexpr FileTime1970 = 116444736000000000;
+using ticks = std::chrono::duration<std::int64_t, std::ratio<1, TicksPerSecond>>;
 
 TEST_CASE("JsonBuilder buffer reserve", "[builder]")
 {
@@ -197,14 +215,8 @@ TEST_CASE("JsonBuilder string push_back")
 
     SECTION("push_back std::string")
     {
-        auto itr = b.push_back(b.root(), "", std::string{ "ABCDE" });
+        auto itr = b.push_back<std::string_view>(b.root(), "", std::string{ "ABCDE" });
         REQUIRE(itr->GetUnchecked<std::string_view>() == "ABCDE");
-    }
-
-    SECTION("push_back char")
-    {
-        auto itr = b.push_back(b.root(), "", ' ');
-        REQUIRE(itr->GetUnchecked<std::string_view>() == " ");
     }
 
     SECTION("push_back char*")
@@ -229,11 +241,35 @@ TEST_CASE("JsonBuilder string push_back")
 TEST_CASE("JsonBuilder chrono push_back", "[builder]")
 {
     auto now = std::chrono::system_clock::now();
+    auto nowTicks = std::chrono::time_point_cast<ticks>(now);
 
     JsonBuilder b;
+
+    // Make sure a system time can round-trip (with loss of precision)
     auto itr = b.push_back(b.root(), "CurrentTime", now);
     auto retrieved = itr->GetUnchecked<std::chrono::system_clock::time_point>();
-    REQUIRE(retrieved == now);
+    REQUIRE(retrieved == nowTicks);
+}
+
+TEST_CASE("JsonBuilder chrono-to-TimeStruct push_back", "[builder]")
+{
+    JsonBuilder b;
+
+    // Make sure a system time converts to the correct file time
+    auto itr = b.push_back(b.root(), "+2", std::chrono::system_clock::from_time_t(2));
+    auto retrieved = itr->GetUnchecked<TimeStruct>();
+    auto const expected = FileTime1970 + 2 * TicksPerSecond;
+    REQUIRE(retrieved.Value() == expected);
+}
+
+TEST_CASE("JsonBuilder TimeStruct-to-chrono push_back", "[builder]")
+{
+    JsonBuilder b;
+
+    // Make sure a system time converts to the correct file time
+    auto itr = b.push_back(b.root(), "+2", TimeStruct::FromValue(FileTime1970 + 2 * TicksPerSecond));
+    auto retrieved = itr->GetUnchecked<std::chrono::system_clock::time_point>();
+    REQUIRE(retrieved == std::chrono::system_clock::from_time_t(2));
 }
 
 TEST_CASE("JsonBuilder uuid push_back", "[builder]")
@@ -245,7 +281,7 @@ TEST_CASE("JsonBuilder uuid push_back", "[builder]")
     auto itr = b.push_back(b.root(), "Uuid", uuid);
 
     auto retrieved = itr->GetUnchecked<UuidStruct>();
-    REQUIRE(uuid_compare(retrieved.Data, uuid.Data) == 0);
+    REQUIRE(memcmp(retrieved.Data, uuid.Data, sizeof(uuid.Data)) == 0);
 }
 
 TEST_CASE("JsonBuilder find", "[builder]")
@@ -585,6 +621,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
     SECTION("time")
     {
         auto now = std::chrono::system_clock::now();
+        auto nowTicks = std::chrono::time_point_cast<ticks>(now);
         auto itr = b.push_back(b.root(), "", now);
 
         REQUIRE(!itr->ConvertTo(bval));
@@ -592,7 +629,7 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
         REQUIRE(!itr->ConvertTo(ival));
         REQUIRE(!itr->ConvertTo(uval));
         REQUIRE(!itr->ConvertTo(sval));
-        REQUIRE((itr->ConvertTo(tval) && tval == now));
+        REQUIRE((itr->ConvertTo(tval) && tval == nowTicks));
         REQUIRE(!itr->ConvertTo(uuidval));
     }
 
@@ -611,6 +648,6 @@ TEST_CASE("JsonBuilder conversions", "[builder]")
         REQUIRE(!itr->ConvertTo(tval));
         REQUIRE(
             (itr->ConvertTo(uuidval) &&
-             0 == uuid_compare(uuidval.Data, uuid.Data)));
+             0 == memcmp(uuidval.Data, uuid.Data, sizeof(uuidval.Data))));
     }
 }
