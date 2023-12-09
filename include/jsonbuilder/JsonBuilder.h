@@ -169,20 +169,21 @@ protected:
     /*
     assert(index < currentSize)
     */
-    static void CheckOffset(size_type index, size_type currentSize) throw();
+    static void CheckOffset(size_type index, size_type currentSize) noexcept;
 
     /*
     assert(p1 <= p2 <= p3)
     */
     static void
-    CheckRange(void const* p1, void const* p2, void const* p3) throw();
+    CheckRange(void const* p1, void const* p2, void const* p3) noexcept;
 
     /*
     return checked(a + b)
     */
     static size_type CheckedAdd(
         size_type a,
-        size_type b);  // may throw length_error
+        size_type b)
+        noexcept(false);  // may throw length_error
 
     /*
     memcpy(pDest, pSource, cb)
@@ -190,7 +191,7 @@ protected:
     static void InitData(
         _Out_writes_bytes_(cb) void* pDest,
         _In_reads_bytes_(cb) void const* pSource,
-        JSON_SIZE_T cb) throw();
+        JSON_SIZE_T cb) noexcept;
 
     /*
     Returns a value newCapacity such that minCapacity <= newCapacity <=
@@ -209,12 +210,13 @@ protected:
     */
     static void* Allocate(
         JSON_SIZE_T cb,
-        bool zeroInitializeMemory);  // may throw bad_alloc, length_error
+        bool zeroInitializeMemory)
+        noexcept(false);  // may throw bad_alloc, length_error
 
     /*
     Calls free.
     */
-    static void Deallocate(void* pb) throw();
+    static void Deallocate(void* pb) noexcept;
 };
 
 template<class T>
@@ -239,15 +241,15 @@ class PodVector : private PodVectorBase
   public:
     using PodVectorBase::size_type;
 
-    ~PodVector() throw() { Deallocate(m_data); }
+    ~PodVector() noexcept { Deallocate(m_data); }
 
-    PodVector() throw()
+    PodVector() noexcept
         : m_data(nullptr), m_size(0), m_capacity(0), m_zeroInitializeMemory(false)
     {
         return;
     }
 
-    PodVector(PodVector&& other) throw()
+    PodVector(PodVector&& other) noexcept
         : m_data(other.m_data)
         , m_size(other.m_size)
         , m_capacity(other.m_capacity)
@@ -259,7 +261,8 @@ class PodVector : private PodVectorBase
         other.m_zeroInitializeMemory = false;
     }
 
-    PodVector(PodVector const& other)  // may throw bad_alloc
+    PodVector(PodVector const& other)
+        noexcept(false) // may throw bad_alloc
         : m_data(nullptr)
         , m_size(other.m_size)
         , m_capacity(other.m_size)
@@ -275,7 +278,8 @@ class PodVector : private PodVectorBase
 
     PodVector(
         T const* data,
-        size_type size)  // may throw bad_alloc
+        size_type size)
+        noexcept(false) // may throw bad_alloc
         : m_data(nullptr)
         , m_size(size)
         , m_capacity(size)
@@ -289,37 +293,38 @@ class PodVector : private PodVectorBase
         }
     }
 
-    PodVector& operator=(PodVector&& other) throw()
+    PodVector& operator=(PodVector&& other) noexcept
     {
         PodVector(static_cast<PodVector&&>(other)).swap(*this);
         return *this;
     }
 
-    PodVector& operator=(PodVector const& other)  // may throw bad_alloc
+    PodVector& operator=(PodVector const& other)
+        noexcept(false) // may throw bad_alloc
     {
         PodVector(other).swap(*this);
         return *this;
     }
 
-    static constexpr size_type max_size() throw() { return m_maxSize; }
+    static constexpr size_type max_size() noexcept { return m_maxSize; }
 
-    size_type size() const throw() { return m_size; }
+    size_type size() const noexcept { return m_size; }
 
-    bool empty() const throw() { return m_size == 0; }
+    bool empty() const noexcept { return m_size == 0; }
 
-    size_type capacity() const throw() { return m_capacity; }
+    size_type capacity() const noexcept { return m_capacity; }
 
-    T const* data() const throw() { return m_data; }
+    T const* data() const noexcept { return m_data; }
 
-    T* data() throw() { return m_data; }
+    T* data() noexcept { return m_data; }
 
-    T const& operator[](unsigned i) const throw()
+    T const& operator[](unsigned i) const noexcept
     {
         CheckOffset(i, m_size);
         return m_data[i];
     }
 
-    T& operator[](unsigned i) throw()
+    T& operator[](unsigned i) noexcept
     {
         CheckOffset(i, m_size);
         return m_data[i];
@@ -327,7 +332,8 @@ class PodVector : private PodVectorBase
 
     void clear() { m_size = 0; }
 
-    void push_back(T const& val)  // may throw bad_alloc, length_error
+    void push_back(T const& val)
+        noexcept(false) // may throw bad_alloc, length_error
     {
         if (m_size == m_capacity)
         {
@@ -338,7 +344,8 @@ class PodVector : private PodVectorBase
 
     void append(
         T const* pItems,
-        size_type cItems)  // may throw bad_alloc, length_error
+        size_type cItems)
+        noexcept(false) // may throw bad_alloc, length_error
     {
         if (cItems > m_capacity - m_size)
         {
@@ -351,7 +358,8 @@ class PodVector : private PodVectorBase
 
     void append(
         size_type cCopies,
-        T const& val)  // may throw bad_alloc, length_error
+        T const& val)
+        noexcept(false) // may throw bad_alloc, length_error
     {
         if (cCopies > m_capacity - m_size)
         {
@@ -367,7 +375,8 @@ class PodVector : private PodVectorBase
         m_size += cCopies;
     }
 
-    void reserve(size_type minCapacity)  // may throw bad_alloc, length_error
+    void reserve(size_type minCapacity)
+        noexcept(false) // may throw bad_alloc, length_error
     {
         if (m_capacity < minCapacity)
         {
@@ -378,13 +387,14 @@ class PodVector : private PodVectorBase
     /*
     NOTE: new items are uninitialized, unless m_zeroInitializeMemory is set
     */
-    void resize(size_type newSize)  // may throw bad_alloc, length_error
+    void resize(size_type newSize)
+        noexcept(false) // may throw bad_alloc, length_error
     {
         reserve(newSize);
         m_size = newSize;
     }
 
-    void swap(PodVector& other) throw()
+    void swap(PodVector& other) noexcept
     {
         auto const d = m_data;
         m_data = other.m_data;
@@ -415,7 +425,8 @@ class PodVector : private PodVectorBase
     p[0] = ...; // p has room for 10 items.
     v.SetEndPointer(p + 10); // Include the newly-written items in vector.
     */
-    T* GetAppendPointer(unsigned cItems)  // may throw bad_alloc, length_error
+    T* GetAppendPointer(unsigned cItems)
+        noexcept(false) // may throw bad_alloc, length_error
     {
         if (cItems > m_capacity - m_size)
         {
@@ -424,24 +435,27 @@ class PodVector : private PodVectorBase
         return m_data + m_size;
     }
 
-    void SetEndPointer(T* pNewEnd) throw()
+    void SetEndPointer(T* pNewEnd) noexcept
     {
         CheckRange(m_data, pNewEnd, m_data + m_capacity);
         m_size = static_cast<size_type>(pNewEnd - m_data);
     }
 
   private:
-    void Grow()  // may throw bad_alloc, length_error
+    void Grow()
+        noexcept(false) // may throw bad_alloc, length_error
     {
         GrowTo(m_capacity + 1);
     }
 
-    void GrowBy(size_type cItems)  // may throw bad_alloc, length_error
+    void GrowBy(size_type cItems)
+        noexcept(false) // may throw bad_alloc, length_error
     {
         GrowTo(CheckedAdd(m_size, cItems));
     }
 
-    void GrowTo(size_type minCapacity)  // may throw bad_alloc, length_error
+    void GrowTo(size_type minCapacity)
+        noexcept(false) // may throw bad_alloc, length_error
     {
         auto const newCapacity = GetNewCapacity(minCapacity, m_maxSize);
         auto const newData = static_cast<T*>(Allocate(newCapacity * sizeof(T), m_zeroInitializeMemory));
@@ -646,12 +660,12 @@ class JsonValue : private JsonValueBase
     /*
     Gets the type of the value.
     */
-    JsonType Type() const throw();
+    JsonType Type() const noexcept;
 
     /*
     Gets the name of the value.
     */
-    std::string_view Name() const throw();
+    std::string_view Name() const noexcept;
 
     /*
     Gets the size of the data of the value, in bytes.
@@ -659,21 +673,21 @@ class JsonValue : private JsonValueBase
     error to call DataSize() on a value where Type() is hidden, object, or
     array.
     */
-    unsigned DataSize() const throw();
+    unsigned DataSize() const noexcept;
 
     /*
     Reduces the size recorded for the data.
     Does not change the size of the underlying buffer.
     Requires: cbNew <= DataSize().
     */
-    void ReduceDataSize(unsigned cbNew) throw();
+    void ReduceDataSize(unsigned cbNew) noexcept;
 
     /*
     Gets a pointer to the data of the value.
     Note that hidden, object, and array values do not have data, and it is an
     error to call Data() on a value where Type() is hidden, object, or array.
     */
-    void const* Data(_Out_opt_ unsigned* pcbData = nullptr) const throw();
+    void const* Data(_Out_opt_ unsigned* pcbData = nullptr) const noexcept;
 
     /*
     Gets a pointer to the data of the value. The data can be modified, though
@@ -681,12 +695,12 @@ class JsonValue : private JsonValueBase
     Note that hidden, object, and array values do not have data, and it is an
     error to call Data() on a value where Type() is hidden, object, or array.
     */
-    void* Data(_Out_opt_ unsigned* pcbData = nullptr) throw();
+    void* Data(_Out_opt_ unsigned* pcbData = nullptr) noexcept;
 
     /*
     Returns true if Type==Null.
     */
-    bool IsNull() const throw();
+    bool IsNull() const noexcept;
 
     /*
     Returns the value's data as a T.
@@ -721,7 +735,7 @@ class JsonValue : private JsonValueBase
     Else assert(false), return a default value of T (e.g. 0);
     */
     template<class T>
-    auto GetUnchecked() const throw()
+    auto GetUnchecked() const noexcept
         -> decltype(JsonImplementType<typename std::decay<T>::type>::GetUnchecked(
             *(JsonValue const*) 0))
     {
@@ -753,7 +767,7 @@ class JsonValue : private JsonValueBase
             decltype(JsonImplementType<typename std::decay<T>::type>::ConvertTo(
                 *(JsonValue const*) 0,
                 *(T*) 0))>
-    bool ConvertTo(T& result) const throw()
+    bool ConvertTo(T& result) const noexcept
     {
         return JsonImplementType<typename std::decay<T>::type>::ConvertTo(
             *this, result);
@@ -773,7 +787,7 @@ class JsonConstIterator
     JsonBuilder const* m_pContainer;
     Index m_index;
 
-    JsonConstIterator(JsonBuilder const* pContainer, Index index) throw();
+    JsonConstIterator(JsonBuilder const* pContainer, Index index) noexcept;
 
   public:
     using iterator_category = std::forward_iterator_tag;
@@ -782,37 +796,37 @@ class JsonConstIterator
     using pointer = JsonValue const*;
     using reference = JsonValue const&;
 
-    JsonConstIterator() throw();
+    JsonConstIterator() noexcept;
 
-    bool operator==(JsonConstIterator const&) const throw();
-    bool operator!=(JsonConstIterator const&) const throw();
+    bool operator==(JsonConstIterator const&) const noexcept;
+    bool operator!=(JsonConstIterator const&) const noexcept;
 
-    reference operator*() const throw();
-    pointer operator->() const throw();
+    reference operator*() const noexcept;
+    pointer operator->() const noexcept;
 
-    JsonConstIterator& operator++() throw();
-    JsonConstIterator operator++(int) throw();
+    JsonConstIterator& operator++() noexcept;
+    JsonConstIterator operator++(int) noexcept;
 
     /*
     For iterating over this value's children.
     iterator.begin() is equivalent to builder.begin(iterator).
     O(1), unless hidden nodes need to be skipped.
     */
-    JsonConstIterator begin() const throw();
+    JsonConstIterator begin() const noexcept;
 
     /*
     For iterating over this value's children.
     iterator.end() is equivalent to builder.end(iterator).
     O(1), unless hidden nodes need to be skipped.
     */
-    JsonConstIterator end() const throw();
+    JsonConstIterator end() const noexcept;
 
     /*
     Returns true if this iterator refers to the root object of a JsonBuilder.
     Note that it is an error to dereference or ++ an iterator that references
     the root object (e.g. it is an error to do jsonBuilder.end()++).
     */
-    bool IsRoot() const throw();
+    bool IsRoot() const noexcept;
 };
 
 /*
@@ -827,33 +841,33 @@ class JsonIterator : public JsonConstIterator
     to the constructor of a JsonIterator. This avoids the need for
     JsonConstIterator to declare JsonIterator as a friend.
     */
-    explicit JsonIterator(JsonConstIterator const&) throw();
+    explicit JsonIterator(JsonConstIterator const&) noexcept;
 
   public:
     typedef JsonValue& reference;
     typedef JsonValue* pointer;
 
-    JsonIterator() throw();
+    JsonIterator() noexcept;
 
-    reference operator*() const throw();
-    pointer operator->() const throw();
+    reference operator*() const noexcept;
+    pointer operator->() const noexcept;
 
-    JsonIterator& operator++() throw();
-    JsonIterator operator++(int) throw();
+    JsonIterator& operator++() noexcept;
+    JsonIterator operator++(int) noexcept;
 
     /*
     For iterating  over this value's children.
     iterator.begin() is equivalent to builder.begin(iterator).
     O(1), unless hidden nodes need to be skipped.
     */
-    JsonIterator begin() const throw();
+    JsonIterator begin() const noexcept;
 
     /*
     For iterating  over this value's children.
     iterator.end() is equivalent to builder.end(iterator).
     O(1), unless hidden nodes need to be skipped.
     */
-    JsonIterator end() const throw();
+    JsonIterator end() const noexcept;
 };
 
 // JsonBuilder
@@ -898,15 +912,17 @@ class JsonBuilder
 
         explicit Validator(
             _In_reads_(cStorage) JsonValue::StoragePod const* pStorage,
-            size_type cStorage);  // may throw bad_alloc
+            size_type cStorage)
+            noexcept(false);  // may throw bad_alloc
 
-        void Validate();  // may throw invalid_argument
+        void Validate()
+            noexcept(false);  // may throw invalid_argument
 
       private:
-        void ValidateRecurse(Index index);
+        void ValidateRecurse(Index index) noexcept(false);
 
         void
-        UpdateMap(Index index, ValidationState expectedVal, ValidationState newVal);
+        UpdateMap(Index index, ValidationState expectedVal, ValidationState newVal) noexcept(false);
     };
 
   public:
@@ -921,27 +937,28 @@ class JsonBuilder
     /*
     Initializes a new instance of the JsonBuilder class.
     */
-    JsonBuilder() throw();
+    JsonBuilder() noexcept;
 
     /*
     Initializes a new instance of the JsonBuilder class using at least the
     specified initial capacity (in bytes).
     */
-    explicit JsonBuilder(size_type cbInitialCapacity);  // may throw bad_alloc,
-                                                        // length_error
+    explicit JsonBuilder(size_type cbInitialCapacity)
+        noexcept(false);  // may throw bad_alloc, length_error
 
     /*
     Initializes a new instance of the JsonBuilder class, copying its data from
     other.
     */
-    JsonBuilder(JsonBuilder const& other);  // may throw bad_alloc
+    JsonBuilder(JsonBuilder const& other)
+        noexcept(false);  // may throw bad_alloc
 
     /*
     Initializes a new instance of the JsonBuilder class, moving the data from
     other.
     NOTE: Invalidates all iterators pointing into other.
     */
-    JsonBuilder(JsonBuilder&& other) throw();
+    JsonBuilder(JsonBuilder&& other) noexcept;
 
     /*
     Initializes a new instance of the JsonBuilder class, copying its data from
@@ -950,43 +967,44 @@ class JsonBuilder
     JsonBuilder(
         _In_reads_bytes_(cbRawData) void const* pbRawData,
         size_type cbRawData,
-        bool validateData = true);  // may throw bad_alloc, length_error,
-                                    // invalid_argument
+        bool validateData = true)
+        noexcept(false);  // may throw bad_alloc, length_error invalid_argument
 
     /*
     Copies data from other.
     */
-    JsonBuilder& operator=(JsonBuilder const& other);  // may throw bad_alloc
+    JsonBuilder& operator=(JsonBuilder const& other)
+        noexcept(false);  // may throw bad_alloc
 
     /*
     Moves the data from other.
     NOTE: Invalidates all iterators pointing into other.
     */
-    JsonBuilder& operator=(JsonBuilder&& other) throw();
+    JsonBuilder& operator=(JsonBuilder&& other) noexcept;
 
     /*
     Throws an exception if the data in this JsonBuilder is corrupt.
     Mainly for use in debugging, but this can also be used when feeding
     untrusted data to JsonBuilder.
     */
-    void ValidateData() const;  // May throw bad_alloc, invalid_argument.
+    void ValidateData() const noexcept(false);  // May throw bad_alloc, invalid_argument.
 
-    iterator begin() throw();
-    const_iterator begin() const throw();
-    const_iterator cbegin() const throw();
+    iterator begin() noexcept;
+    const_iterator begin() const noexcept;
+    const_iterator cbegin() const noexcept;
 
-    iterator end() throw();
-    const_iterator end() const throw();
-    const_iterator cend() const throw();
+    iterator end() noexcept;
+    const_iterator end() const noexcept;
+    const_iterator cend() const noexcept;
 
-    iterator root() throw();
-    const_iterator root() const throw();
-    const_iterator croot() const throw();
+    iterator root() noexcept;
+    const_iterator root() const noexcept;
+    const_iterator croot() const noexcept;
 
     /*
     Returns a pointer to the first element in the backing raw data vector.
     */
-    void const* buffer_data() const throw();
+    void const* buffer_data() const noexcept;
 
     /*
     Returns the size (in bytes) of the memory currently being used by this
@@ -995,7 +1013,7 @@ class JsonBuilder
     for the initialCapacity constructor parameter. This is also the size of
     the data returned by buffer_data().
     */
-    size_type buffer_size() const throw();
+    size_type buffer_size() const noexcept;
 
     /*
     Returns the size (in bytes) of the memory currently allocated by this
@@ -1003,7 +1021,7 @@ class JsonBuilder
     This value is primarily intended to help in determining the appropriate
     value for the initialCapacity constructor parameter.
     */
-    size_type buffer_capacity() const throw();
+    size_type buffer_capacity() const noexcept;
 
     /*
     Returns the maximum size (in bytes) of the memory that could be passed
@@ -1011,7 +1029,7 @@ class JsonBuilder
     On 32-bit systems, this is currently slightly less than 4GB.
     On 64-bit systems, this is currently slightly less than 16GB.
     */
-    static constexpr size_type buffer_max_size() throw()
+    static constexpr size_type buffer_max_size() noexcept
     {
         return StorageVec::max_size() * sizeof(JsonValue::StoragePod);
     }
@@ -1021,15 +1039,15 @@ class JsonBuilder
     JsonBuilder, allocates additional memory so that at least the specified
     amount is allocated.
     */
-    void buffer_reserve(size_type cbMinimumCapacity);  // may throw bad_alloc,
-                                                       // length_error
+    void buffer_reserve(size_type cbMinimumCapacity)
+        noexcept(false);  // may throw bad_alloc, length_error
 
     /*
     Removes all data from this JsonBuilder and prepares it for reuse.
     Keeps the currently-allocated buffer.
     O(1).
     */
-    void clear() throw();
+    void clear() noexcept;
 
     /*
     Marks the specified value as Erased. Equivalent to erase(itValue,
@@ -1039,7 +1057,7 @@ class JsonBuilder
     continue to take up space in the tree. O(1), unless there are erased values
     that have to be skipped to find itValue+1.
     */
-    iterator erase(const_iterator itValue) throw();
+    iterator erase(const_iterator itValue) noexcept;
 
     /*
     Marks the specified range as Erased.
@@ -1050,14 +1068,14 @@ class JsonBuilder
     in the tree.
     O(n), where n = the number of values in the range itBegin..itEnd.
     */
-    iterator erase(const_iterator itBegin, const_iterator itEnd) throw();
+    iterator erase(const_iterator itBegin, const_iterator itEnd) noexcept;
 
     /*
     Replaces the contents of this with the contents of other.
     NOTE: Invalidates all iterators pointing into this and other.
     O(1).
     */
-    void swap(JsonBuilder& other) throw();
+    void swap(JsonBuilder& other) noexcept;
 
     /*
     Causes all future memory allocations by this JsonBuilder to be initialized
@@ -1077,7 +1095,7 @@ class JsonBuilder
     */
     template<class... NameTys>
     iterator
-    find(std::string_view const& firstName, NameTys const&... additionalNames) throw()
+    find(std::string_view const& firstName, NameTys const&... additionalNames) noexcept
     {
         return iterator(
             const_iterator(this, Find(0, firstName, additionalNames...)));
@@ -1093,7 +1111,7 @@ class JsonBuilder
     template<class... NameTys>
     const_iterator
     find(std::string_view const& firstName, NameTys const&... additionalNames) const
-        throw()
+        noexcept
     {
         return const_iterator(this, Find(0, firstName, additionalNames...));
     }
@@ -1109,7 +1127,7 @@ class JsonBuilder
     iterator find(
         const_iterator const& itParent,
         std::string_view const& firstName,
-        NameTys const&... additionalNames) throw()
+        NameTys const&... additionalNames) noexcept
     {
         ValidateIterator(itParent);
         return iterator(const_iterator(
@@ -1127,7 +1145,7 @@ class JsonBuilder
     const_iterator find(
         const_iterator const& itParent,
         std::string_view const& firstName,
-        NameTys const&... additionalNames) const throw()
+        NameTys const&... additionalNames) const noexcept
     {
         ValidateIterator(itParent);
         return const_iterator(
@@ -1138,46 +1156,46 @@ class JsonBuilder
     Returns the number of children of itParent.
     O(n), where n is the number of children of itParent.
     */
-    unsigned count(const_iterator const& itParent) const throw();
+    unsigned count(const_iterator const& itParent) const noexcept;
 
     /*
     Returns the first child of itParent.
     If itParent has no children, returns end(itParent).
     O(1), unless there are erased values that have to be skipped.
     */
-    iterator begin(const_iterator const& itParent) throw();
+    iterator begin(const_iterator const& itParent) noexcept;
 
     /*
     Returns the first child of itParent.
     If itParent has no children, returns end(itParent).
     O(1), unless there are erased values that have to be skipped.
     */
-    const_iterator begin(const_iterator const& itParent) const throw();
+    const_iterator begin(const_iterator const& itParent) const noexcept;
 
     /*
     Returns the first child of itParent.
     If itParent has no children, returns cend(itParent).
     O(1), unless there are erased values that have to be skipped.
     */
-    const_iterator cbegin(const_iterator const& itParent) const throw();
+    const_iterator cbegin(const_iterator const& itParent) const noexcept;
 
     /*
     Returns the iterator after the last child of itParent.
     O(1), unless there are erased values that have to be skipped.
     */
-    iterator end(const_iterator const& itParent) throw();
+    iterator end(const_iterator const& itParent) noexcept;
 
     /*
     Returns the iterator after the last child of itParent.
     O(1), unless there are erased values that have to be skipped.
     */
-    const_iterator end(const_iterator const& itParent) const throw();
+    const_iterator end(const_iterator const& itParent) const noexcept;
 
     /*
     Returns the iterator after the last child of itParent.
     O(1), unless there are erased value that have to be skipped.
     */
-    const_iterator cend(const_iterator const& itParent) const throw();
+    const_iterator cend(const_iterator const& itParent) const noexcept;
 
     /*
     Removes all children from itOldParent.
@@ -1187,7 +1205,7 @@ class JsonBuilder
     */
     void splice_front(
         const_iterator const& itOldParent,
-        const_iterator const& itNewParent) throw()
+        const_iterator const& itNewParent) noexcept
     {
         Splice(true, itOldParent, itNewParent, PredicateTrue());
     }
@@ -1200,7 +1218,7 @@ class JsonBuilder
     */
     void splice_back(
         const_iterator const& itOldParent,
-        const_iterator const& itNewParent) throw()
+        const_iterator const& itNewParent) noexcept
     {
         Splice(false, itOldParent, itNewParent, PredicateTrue());
     }
@@ -1215,7 +1233,7 @@ class JsonBuilder
     void splice_front(
         const_iterator const& itOldParent,
         const_iterator const& itNewParent,
-        PredTy&& pred) throw()
+        PredTy&& pred) noexcept
     {
         Splice(true, itOldParent, itNewParent, static_cast<PredTy&&>(pred));
     }
@@ -1230,7 +1248,7 @@ class JsonBuilder
     void splice_back(
         const_iterator const& itOldParent,
         const_iterator const& itNewParent,
-        PredTy&& pred) throw()
+        PredTy&& pred) noexcept
     {
         Splice(false, itOldParent, itNewParent, static_cast<PredTy&&>(pred));
     }
@@ -1249,7 +1267,8 @@ class JsonBuilder
         std::string_view const& name,
         JsonType type,
         unsigned cbData = 0,
-        _In_reads_bytes_(cbData) void const* pbData = nullptr);  // may throw bad_alloc, length_error
+        _In_reads_bytes_(cbData) void const* pbData = nullptr)
+        noexcept(false);  // may throw bad_alloc, length_error
 
     /*
     Creates a new value. Inserts it as the first child of itParent.
@@ -1263,7 +1282,8 @@ class JsonBuilder
         std::string_view const& name,
         JsonType type,
         unsigned cbData = 0,
-        _In_reads_bytes_(cbData) void const* pbData = nullptr)  // may throw bad_alloc, length_error
+        _In_reads_bytes_(cbData) void const* pbData = nullptr)
+        noexcept(false) // may throw bad_alloc, length_error
     {
         return AddValue(true, itParent, name, type, cbData, pbData);
     }
@@ -1280,7 +1300,8 @@ class JsonBuilder
         std::string_view const& name,
         JsonType type,
         unsigned cbData = 0,
-        _In_reads_bytes_(cbData) void const* pbData = nullptr)  // may throw bad_alloc, length_error
+        _In_reads_bytes_(cbData) void const* pbData = nullptr)
+        noexcept(false) // may throw bad_alloc, length_error
     {
         return AddValue(false, itParent, name, type, cbData, pbData);
     }
@@ -1317,7 +1338,8 @@ class JsonBuilder
         bool front,
         const_iterator const& itParent,
         std::string_view const& name,
-        T const& data)  // may throw bad_alloc, length_error
+        T const& data)
+        noexcept(false) // may throw bad_alloc, length_error
     {
         return JsonImplementType<typename std::decay<T>::type>::AddValue(
             *this, front, itParent, name, data);
@@ -1353,7 +1375,8 @@ class JsonBuilder
     iterator push_front(
         const_iterator const& itParent,
         std::string_view const& name,
-        T const& data)  // may throw bad_alloc, length_error
+        T const& data)
+        noexcept(false) // may throw bad_alloc, length_error
     {
         return JsonImplementType<typename std::decay<T>::type>::AddValue(
             *this, true, itParent, name, data);
@@ -1389,32 +1412,33 @@ class JsonBuilder
     iterator push_back(
         const_iterator const& itParent,
         std::string_view const& name,
-        T const& data)  // may throw bad_alloc, length_error
+        T const& data)
+        noexcept(false) // may throw bad_alloc, length_error
     {
         return JsonImplementType<typename std::decay<T>::type>::AddValue(
             *this, false, itParent, name, data);
     }
 
   private:
-    static void AssertNotEnd(Index) throw();
-    static void AssertHidden(JsonType) throw();
-    void ValidateIterator(const_iterator const&) const throw();
-    void ValidateParentIterator(Index) const throw();  // Note: assumes !empty()
+    static void AssertNotEnd(Index) noexcept;
+    static void AssertHidden(JsonType) noexcept;
+    void ValidateIterator(const_iterator const&) const noexcept;
+    void ValidateParentIterator(Index) const noexcept;  // Note: assumes !empty()
     bool CanIterateOver(const_iterator const&) const
-        throw();  // False if empty() or if iterator is not a parent.
-    JsonValue const& GetValue(Index) const throw();
-    JsonValue& GetValue(Index) throw();
-    Index FirstChild(Index) const throw();  // Given array/object index, return
+        noexcept;  // False if empty() or if iterator is not a parent.
+    JsonValue const& GetValue(Index) const noexcept;
+    JsonValue& GetValue(Index) noexcept;
+    Index FirstChild(Index) const noexcept; // Given array/object index, return
                                             // index of first child.
-    Index LastChild(Index) const throw();   // Given array/object index, return
+    Index LastChild(Index) const noexcept;  // Given array/object index, return
                                             // index of last child.
-    Index NextIndex(Index) const throw();   // Given index, return next
+    Index NextIndex(Index) const noexcept;  // Given index, return next
                                             // non-hidden index.
-    void EnsureRootExists();  // If root object does not exist, create it. May
-                              // throw bad_alloc.
+    void EnsureRootExists() // If root object does not exist, create it. 
+        noexcept(false); // May throw bad_alloc.
 
     unsigned
-    FindImpl(Index parentIndex, std::string_view const& name) const throw();
+    FindImpl(Index parentIndex, std::string_view const& name) const noexcept;
 
     /*
     Adds an unlinked node to the storage vector. The caller must add the new
@@ -1426,15 +1450,16 @@ class JsonBuilder
         std::string_view const& name,
         JsonType type,
         unsigned cbData,
-        _In_reads_bytes_(cbData) void const* pbData);  // may throw bad_alloc, length_error
+        _In_reads_bytes_(cbData) void const* pbData)
+        noexcept(false);  // may throw bad_alloc, length_error
 
-    unsigned Find(Index parentIndex) const throw() { return parentIndex; }
+    unsigned Find(Index parentIndex) const noexcept { return parentIndex; }
 
     template<class... NameTys>
     unsigned Find(
         Index parentIndex,
         std::string_view const& firstName,
-        NameTys const&... additionalNames) const throw()
+        NameTys const&... additionalNames) const noexcept
     {
         Index childIndex = FindImpl(parentIndex, firstName);
         if (childIndex)
@@ -1446,7 +1471,7 @@ class JsonBuilder
 
     struct PredicateTrue
     {
-        bool operator()(const_iterator const&) const throw() { return true; }
+        bool operator()(const_iterator const&) const noexcept { return true; }
     };
 
     template<class PredTy>
@@ -1454,7 +1479,7 @@ class JsonBuilder
         bool front,
         const_iterator const& itOldParent,
         const_iterator const& itNewParent,
-        PredTy&& pred) throw()
+        PredTy&& pred) noexcept
     {
         ValidateIterator(itOldParent);
         ValidateIterator(itNewParent);
@@ -1543,7 +1568,7 @@ class JsonBuilder
 /*
 Exchanges the contents of two JsonBuilder objects.
 */
-void swap(JsonBuilder&, JsonBuilder&) throw();
+void swap(JsonBuilder&, JsonBuilder&) noexcept;
 
 /*
 UUID object, network byte order (big-endian), compatible with uuid_t.
@@ -1634,8 +1659,8 @@ class JsonImplementType
     class JsonImplementType<T>                                            \
     {                                                                     \
       public:                                                             \
-        static T getRef GetUnchecked(JsonValue const& value) throw();     \
-        static bool ConvertTo(JsonValue const& value, T& result) throw(); \
+        static T getRef GetUnchecked(JsonValue const& value) noexcept;    \
+        static bool ConvertTo(JsonValue const& value, T& result) noexcept;\
         static JsonIterator AddValue(                                     \
             JsonBuilder& builder,                                         \
             bool front,                                                   \

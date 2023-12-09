@@ -57,23 +57,24 @@ class JsonRenderer
     explicit JsonRenderer(
         bool pretty = false,
         std::string_view newLine = "\n",
-        unsigned indentSpaces = 2) throw();
+        unsigned indentSpaces = 2) noexcept;
 
     /*
     Preallocates memory in the rendering buffer (increases capacity).
     */
-    void Reserve(size_type cb);  // may throw bad_alloc, length_error
+    void Reserve(size_type cb)
+        noexcept(false); // may throw bad_alloc, length_error
 
     /*
     Gets the current size of the rendering buffer, in bytes.
     */
-    size_type Size() const throw();
+    size_type Size() const noexcept;
 
     /*
     Gets the current capacity of the rendering buffer (how large it can grow
     without allocating additional memory), in bytes.
     */
-    size_type Capacity() const throw();
+    size_type Capacity() const noexcept;
 
     /*
     Gets a value indicating whether the output will be formatted nicely.
@@ -82,7 +83,7 @@ class JsonRenderer
     If false, all insignificant whitespace will be omitted.
     Default value is false.
     */
-    bool Pretty() const throw();
+    bool Pretty() const noexcept;
 
     /*
     Set a value indicating whether the output will be formatted nicely.
@@ -91,13 +92,13 @@ class JsonRenderer
     If false, all insignificant whitespace will be omitted.
     Default value is false.
     */
-    void Pretty(bool) throw();
+    void Pretty(bool) noexcept;
 
     /*
     Gets the string that is used for newline when Pretty() is true.
     Default value is "\n".
     */
-    std::string_view NewLine() const throw();
+    std::string_view NewLine() const noexcept;
 
     /*
     Sets the string that is used for newline when Pretty() is true.
@@ -106,17 +107,17 @@ class JsonRenderer
     for as long as the JsonRenderer exists (string literal is ok).
     Default value is "\n".
     */
-    void NewLine(std::string_view value) throw();
+    void NewLine(std::string_view value) noexcept;
 
     /*
     Gets the number of spaces per indent level. Default value is 2.
     */
-    unsigned IndentSpaces() const throw();
+    unsigned IndentSpaces() const noexcept;
 
     /*
     Sets the number of spaces per indent level. Default value is 2.
     */
-    void IndentSpaces(unsigned value) throw();
+    void IndentSpaces(unsigned value) noexcept;
 
     /*
     Renders the contents of the specified JsonBuilder as utf-8 JSON, starting
@@ -127,9 +128,8 @@ class JsonRenderer
     The returned string_view is valid until the next call to Render or until
     this JsonBuilder is destroyed.
     */
-    std::string_view Render(JsonBuilder const& builder);  // may throw
-                                                          // bad_alloc,
-                                                          // length_error
+    std::string_view Render(JsonBuilder const& builder)
+        noexcept(false); // may throw bad_alloc, length_error
 
     /*
     Renders the contents of a JsonBuilder as utf-8 JSON, starting at the
@@ -141,8 +141,8 @@ class JsonRenderer
     this JsonBuilder is destroyed.
     */
     std::string_view
-    Render(JsonBuilder::const_iterator const& it);  // may throw bad_alloc,
-                                                    // length_error
+    Render(JsonBuilder::const_iterator const& it)
+        noexcept(false); // may throw bad_alloc, length_error
 
   protected:
     /*
@@ -153,7 +153,8 @@ class JsonRenderer
     */
     virtual void RenderCustom(
         RenderBuffer& buffer,
-        iterator const& itValue);  // may throw bad_alloc, length_error
+        iterator const& itValue)
+        noexcept(false); // may throw bad_alloc, length_error
 
   private:
     /*
@@ -224,34 +225,34 @@ class JsonRenderer
 Renders the given value as an unsigned decimal integer, e.g. "123".
 Returns the number of characters written, not counting the nul-termination.
 */
-unsigned JsonRenderUInt(long long unsigned n, _Out_writes_z_(21) char* pBuffer) throw();
+unsigned JsonRenderUInt(long long unsigned n, _Out_writes_z_(21) char* pBuffer) noexcept;
 
 /*
 Renders the given value as a signed decimal integer, e.g. "-123".
 Returns the number of characters written, not counting the nul-termination.
 */
-unsigned JsonRenderInt(long long signed n, _Out_writes_z_(21) char* pBuffer) throw();
+unsigned JsonRenderInt(long long signed n, _Out_writes_z_(21) char* pBuffer) noexcept;
 
 /*
 Renders the given value as a signed floating-point, e.g. "-123.1", or "null"
 if the value is not finite.
 Returns the number of characters written, not counting the nul-termination.
 */
-unsigned JsonRenderFloat(double n, _Out_writes_z_(32) char* pBuffer) throw();
+unsigned JsonRenderFloat(double n, _Out_writes_z_(32) char* pBuffer) noexcept;
 
 /*
 Renders the string "true" or "false".
 Returns the number of characters written, not counting the nul-termination.
 (Always returns 4 or 5.)
 */
-unsigned JsonRenderBool(bool b, _Out_writes_z_(6) char* pBuffer) throw();
+unsigned JsonRenderBool(bool b, _Out_writes_z_(6) char* pBuffer) noexcept;
 
 /*
 Renders the string "null".
 Returns the number of characters written, not counting the nul-termination.
 (Always returns 4.)
 */
-unsigned JsonRenderNull(_Out_writes_z_(5) char* pBuffer) throw();
+unsigned JsonRenderNull(_Out_writes_z_(5) char* pBuffer) noexcept;
 
 /*
 Renders the given date/time value as an ISO 8601 string, e.g.
@@ -261,7 +262,7 @@ Returns the number of characters written, not counting the nul-termination.
 */
 unsigned JsonRenderTime(
     TimeStruct t,
-    _Out_writes_z_(29) char* pBuffer) throw();
+    _Out_writes_z_(29) char* pBuffer) noexcept;
 
 /*
 Renders the given time_point value as an ISO 8601 string, e.g.
@@ -271,7 +272,7 @@ Returns the number of characters written, not counting the nul-termination.
 */
 unsigned JsonRenderTime(
     std::chrono::system_clock::time_point t,
-    _Out_writes_z_(29) char* pBuffer) throw();
+    _Out_writes_z_(29) char* pBuffer) noexcept;
 
 /*
 Renders the given big-endian uuid_t value as a string in uppercase without
@@ -279,7 +280,7 @@ braces, e.g. "CD8D0A5E-6409-4B8E-9366-B815CEF0E35D".
 Returns the number of characters written, not counting the nul-termination.
 (Always returns 36.)
 */
-unsigned JsonRenderUuid(_In_reads_(16) char unsigned const* g, _Out_writes_z_(37) char* pBuffer) throw();
+unsigned JsonRenderUuid(_In_reads_(16) char unsigned const* g, _Out_writes_z_(37) char* pBuffer) noexcept;
 
 /*
 Renders the given big-endian uuid_t value as a string in uppercase with braces,
@@ -287,6 +288,6 @@ e.g. "{CD8D0A5E-6409-4B8E-9366-B815CEF0E35D}".
 Returns the number of characters written, not counting the nul-termination.
 (Always returns 38.)
 */
-unsigned JsonRenderUuidWithBraces(_In_reads_(16) char unsigned const* g, _Out_writes_z_(39) char* pBuffer) throw();
+unsigned JsonRenderUuidWithBraces(_In_reads_(16) char unsigned const* g, _Out_writes_z_(39) char* pBuffer) noexcept;
 
 }  // namespace jsonbuilder

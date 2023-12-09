@@ -181,14 +181,41 @@ using namespace std::string_view_literals;
 
 TEST_CASE("JsonRenderer JsonTime", "[renderer]")
 {
-    auto epoch = std::chrono::system_clock::from_time_t(2);
+    auto epoch = std::chrono::system_clock::from_time_t(0);
+    using namespace std::chrono_literals;
 
     char chars[39];
-    memset(chars, 1, sizeof(chars));
+    unsigned cch;
 
-    unsigned cch = JsonRenderTime(epoch, chars);
+    memset(chars, 1, sizeof(chars));
+    cch = JsonRenderTime(epoch, chars);
+    REQUIRE(cch == strlen(chars));
+    REQUIRE(chars == "1970-01-01T00:00:00.0000000Z"sv);
+
+    memset(chars, 1, sizeof(chars));
+    cch = JsonRenderTime(epoch + 2s, chars);
     REQUIRE(cch == strlen(chars));
     REQUIRE(chars == "1970-01-01T00:00:02.0000000Z"sv);
+
+    memset(chars, 1, sizeof(chars));
+    cch = JsonRenderTime(epoch - 2s, chars);
+    REQUIRE(cch == strlen(chars));
+    REQUIRE(chars == "1969-12-31T23:59:58.0000000Z"sv);
+
+    memset(chars, 1, sizeof(chars));
+    cch = JsonRenderTime(epoch + 2ms, chars);
+    REQUIRE(cch == strlen(chars));
+    REQUIRE(chars == "1970-01-01T00:00:00.0020000Z"sv);
+
+    memset(chars, 1, sizeof(chars));
+    cch = JsonRenderTime(epoch - 2ms, chars);
+    REQUIRE(cch == strlen(chars));
+    REQUIRE(chars == "1969-12-31T23:59:59.9980000Z"sv);
+
+    memset(chars, 1, sizeof(chars));
+    cch = JsonRenderTime(TimeStruct::FromValue(0xFEDCBA9876543210), chars);
+    REQUIRE(cch == strlen(chars));
+    REQUIRE(chars == "FILETIME(0xFEDCBA9876543210)"sv);
 }
 
 TEST_CASE("JsonRenderer JsonUuid", "[renderer]")

@@ -95,18 +95,18 @@ std::cout << stl_string.c_str() << std::endl;
 
 ## Dependencies
 
-This project carries a dependency on the uuid library. To develop with this project, install the development version of the library:
+The Linux tests for this project depend on the uuid library. To develop with this project, install the development version of the library:
 
 ```bash
 sudo apt-get install uuid-dev
 ```
 
 If you checkout with submodules, you will receive a version of Catch2 for testing that can be used automatically.  If you do not checkout
-this submodule, the build system will instead search for an installed version of Catch2 and use that.
+this submodule, the build system will instead search for an installed version of Catch2 and use that to build the tests.
 
 ## Integration
 
-JsonBuilder builds as a static library and requires C++11. The project creates a CMake compatible 'jsonbuilder' target which you can use for linking against the library.
+JsonBuilder builds as a static library and requires C++17. The project creates a CMake compatible 'jsonbuilder' target which you can use for linking against the library.
 
 1. Add this project as a subdirectory in your project, either as a git submodule or copying the code directly.
 2. Add that directory to your top-level CMakeLists.txt with 'add_subdirectory'. This will make the 'jsonbuilder' target available.
