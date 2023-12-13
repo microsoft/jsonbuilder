@@ -101,10 +101,12 @@ static void TestInputOutputScalar()
 
     JsonBuilder b;
 
-    b.push_back(b.root(), "", InputLimits::lowest());
-    b.push_back(b.root(), "", InputLimits::min());
-    b.push_back(b.root(), "", InputLimits::max());
-    b.push_back(b.root(), "", OutputLimits::lowest());
+#define USTRING(prefix) prefix ## "\u0024\u00A3\u0418\u0939\u20AC\uD55C\U00010348"
+
+    b.push_back(b.root(), USTRING(u), InputLimits::lowest());
+    b.push_back(b.root(), USTRING(U), InputLimits::min());
+    b.push_back(b.root(), USTRING(L), InputLimits::max());
+    b.push_back(b.root(), USTRING(u8), OutputLimits::lowest());
     b.push_back(b.root(), "", OutputLimits::min());
     b.push_back(b.root(), "", OutputLimits::max());
 
@@ -113,21 +115,25 @@ static void TestInputOutputScalar()
     InputType i;
 
     auto it = b.begin();
+    REQUIRE(it->Name() == USTRING(u8));
     REQUIRE(it->GetUnchecked<InputType>() == InputLimits::lowest());
     REQUIRE(it->ConvertTo(i));
     REQUIRE(i == InputLimits::lowest());
 
     ++it;
+    REQUIRE(it->Name() == USTRING(u8));
     REQUIRE(it->GetUnchecked<InputType>() == InputLimits::min());
     REQUIRE(it->ConvertTo(i));
     REQUIRE(i == InputLimits::min());
 
     ++it;
+    REQUIRE(it->Name() == USTRING(u8));
     REQUIRE(it->GetUnchecked<InputType>() == InputLimits::max());
     REQUIRE(it->ConvertTo(i));
     REQUIRE(i == InputLimits::max());
 
     ++it;
+    REQUIRE(it->Name() == USTRING(u8));
     REQUIRE(
         it->GetUnchecked<InputType>() ==
         static_cast<InputType>(OutputLimits::lowest()));
@@ -201,6 +207,35 @@ TEST_CASE("JsonBuilder numeric limits", "[builder]")
 
     SECTION("float") { TestInputOutputScalar<float, double>(); }
     SECTION("double") { TestInputOutputScalar<double, double>(); }
+}
+
+TEST_CASE("JsonBuilder internal name realloc")
+{
+    JsonBuilder b;
+    std::string_view constexpr expectedName = "expectedName";
+    std::string_view actualName = expectedName;
+    std::string_view constexpr expectedVal = "expectedVal";
+    std::string_view actualVal = expectedVal;
+
+    auto it = b.push_back(b.root(), actualName, actualVal);
+    actualName = it->Name();
+    actualVal = it->GetUnchecked<std::string_view>();
+
+    // Verify that the correct name and value get added even if they point into
+    // the buffer and the buffer is reallocated.
+    auto const cap = b.buffer_capacity();
+    while (cap == b.buffer_capacity())
+    {
+        it = b.push_back(b.root(), actualName, actualVal);
+
+        actualName = it->Name();
+        REQUIRE(actualName.data() != expectedName.data());
+        REQUIRE(actualName == expectedName);
+
+        actualVal = it->GetUnchecked<std::string_view>();
+        REQUIRE(actualVal.data() != expectedVal.data());
+        REQUIRE(actualVal == expectedVal);
+    }
 }
 
 TEST_CASE("JsonBuilder string push_back")
