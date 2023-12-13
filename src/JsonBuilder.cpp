@@ -1069,7 +1069,8 @@ JsonBuilder::_newValueCommit(
     assert(m_storage.capacity() >= dataIndex + (sizeof(void*) + StorageSize - 1) / StorageSize);
 
     auto const parentIndex = pValue->m_nextIndex;
-    ValidateParentIterator(parentIndex);
+    assert(parentIndex < newIndex);
+    assert(IS_COMPOSITE_TYPE(GetValue(parentIndex).m_type));
 
     auto const front = pValue->m_type != 0;
     assert(pValue->m_type == 0 || pValue->m_type == 1);
