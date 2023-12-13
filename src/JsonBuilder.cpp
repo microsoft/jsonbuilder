@@ -22,7 +22,7 @@ value.DataIndex = value.Index + DATA_OFFSET(value.cchName).
 #define IS_COMPOSITE_TYPE(type) (JsonArray <= (type))
 
 auto constexpr TicksPerSecond = 10'000'000u;
-auto constexpr FileTime1970Ticks = 116444736000000000;
+auto constexpr FileTime1970Ticks = 116444736000000000u;
 using ticks = std::chrono::duration<std::int64_t, std::ratio<1, TicksPerSecond>>;
 
 // JsonValue
@@ -39,22 +39,22 @@ static_assert(
 static_assert(sizeof(JsonValueBase) == 8, "JsonValueBase changed size");
 static_assert(sizeof(JsonValue) == 12, "JsonValue changed size");
 
-JsonType JsonValue::Type() const throw()
+JsonType JsonValue::Type() const noexcept
 {
     return static_cast<JsonType>(m_type);
 }
 
-std::string_view JsonValue::Name() const throw()
+std::string_view JsonValue::Name() const noexcept
 {
     return std::string_view(reinterpret_cast<char const*>(this + 1), m_cchName);
 }
 
-void const* JsonValue::Data(_Out_opt_ unsigned* pcbData) const throw()
+void const* JsonValue::Data(_Out_opt_ unsigned* pcbData) const noexcept
 {
     return const_cast<JsonValue*>(this)->Data(pcbData);
 }
 
-void* JsonValue::Data(_Out_opt_ unsigned* pcbData) throw()
+void* JsonValue::Data(_Out_opt_ unsigned* pcbData) noexcept
 {
     assert(!IS_SPECIAL_TYPE(m_type));  // Can't call Data() on hidden,
     // object, or array values.
@@ -66,14 +66,14 @@ void* JsonValue::Data(_Out_opt_ unsigned* pcbData) throw()
     return reinterpret_cast<StoragePod*>(this) + DATA_OFFSET(m_cchName);
 }
 
-unsigned JsonValue::DataSize() const throw()
+unsigned JsonValue::DataSize() const noexcept
 {
     assert(!IS_SPECIAL_TYPE(m_type));  // Can't call DataSize() on hidden,
     // object, or array values.
     return m_cbData;
 }
 
-void JsonValue::ReduceDataSize(unsigned cbNew) throw()
+void JsonValue::ReduceDataSize(unsigned cbNew) noexcept
 {
     if (IS_SPECIAL_TYPE(m_type) || cbNew > m_cbData)
     {
@@ -84,120 +84,120 @@ void JsonValue::ReduceDataSize(unsigned cbNew) throw()
     m_cbData = cbNew;
 }
 
-bool JsonValue::IsNull() const throw()
+bool JsonValue::IsNull() const noexcept
 {
     return m_type == JsonNull;
 }
 
 // JsonConstIterator
 
-JsonConstIterator::JsonConstIterator() throw() : m_pContainer(), m_index()
+JsonConstIterator::JsonConstIterator() noexcept : m_pContainer(), m_index()
 {
     return;
 }
 
-JsonConstIterator::JsonConstIterator(JsonBuilder const* pContainer, Index index) throw()
+JsonConstIterator::JsonConstIterator(JsonBuilder const* pContainer, Index index) noexcept
     : m_pContainer(pContainer), m_index(index)
 {
     return;
 }
 
-bool JsonConstIterator::operator==(JsonConstIterator const& other) const throw()
+bool JsonConstIterator::operator==(JsonConstIterator const& other) const noexcept
 {
     assert(m_pContainer == other.m_pContainer);
     return m_index == other.m_index;
 }
 
-bool JsonConstIterator::operator!=(JsonConstIterator const& other) const throw()
+bool JsonConstIterator::operator!=(JsonConstIterator const& other) const noexcept
 {
     assert(m_pContainer == other.m_pContainer);
     return m_index != other.m_index;
 }
 
-JsonConstIterator::reference JsonConstIterator::operator*() const throw()
+JsonConstIterator::reference JsonConstIterator::operator*() const noexcept
 {
     m_pContainer->AssertNotEnd(m_index);  // Do not dereference the end()
                                           // iterator.
     return m_pContainer->GetValue(m_index);
 }
 
-JsonConstIterator::pointer JsonConstIterator::operator->() const throw()
+JsonConstIterator::pointer JsonConstIterator::operator->() const noexcept
 {
     m_pContainer->AssertNotEnd(m_index);  // Do not dereference the end()
                                           // iterator.
     return &m_pContainer->GetValue(m_index);
 }
 
-JsonConstIterator& JsonConstIterator::operator++() throw()
+JsonConstIterator& JsonConstIterator::operator++() noexcept
 {
     m_index = m_pContainer->NextIndex(m_index);  // Implicitly asserts !end().
     return *this;
 }
 
-JsonConstIterator JsonConstIterator::operator++(int) throw()
+JsonConstIterator JsonConstIterator::operator++(int) noexcept
 {
     auto old = *this;
     m_index = m_pContainer->NextIndex(m_index);  // Implicitly asserts !end().
     return old;
 }
 
-JsonConstIterator JsonConstIterator::begin() const throw()
+JsonConstIterator JsonConstIterator::begin() const noexcept
 {
     return m_pContainer->begin(*this);
 }
 
-JsonConstIterator JsonConstIterator::end() const throw()
+JsonConstIterator JsonConstIterator::end() const noexcept
 {
     return m_pContainer->end(*this);
 }
 
-bool JsonConstIterator::IsRoot() const throw()
+bool JsonConstIterator::IsRoot() const noexcept
 {
     return m_index == 0;
 }
 
 // JsonIterator
 
-JsonIterator::JsonIterator() throw() : JsonConstIterator()
+JsonIterator::JsonIterator() noexcept : JsonConstIterator()
 {
     return;
 }
 
-JsonIterator::JsonIterator(JsonConstIterator const& other) throw()
+JsonIterator::JsonIterator(JsonConstIterator const& other) noexcept
     : JsonConstIterator(other)
 {
     return;
 }
 
-JsonIterator::reference JsonIterator::operator*() const throw()
+JsonIterator::reference JsonIterator::operator*() const noexcept
 {
     return const_cast<reference>(JsonConstIterator::operator*());
 }
 
-JsonIterator::pointer JsonIterator::operator->() const throw()
+JsonIterator::pointer JsonIterator::operator->() const noexcept
 {
     return const_cast<pointer>(JsonConstIterator::operator->());
 }
 
-JsonIterator& JsonIterator::operator++() throw()
+JsonIterator& JsonIterator::operator++() noexcept
 {
     JsonConstIterator::operator++();
     return *this;
 }
 
-JsonIterator JsonIterator::operator++(int) throw()
+JsonIterator JsonIterator::operator++(int) noexcept
 {
     JsonIterator old(*this);
     JsonConstIterator::operator++();
     return old;
 }
 
-JsonIterator JsonIterator::begin() const throw()
+JsonIterator JsonIterator::begin() const noexcept
 {
     return JsonIterator(JsonConstIterator::begin());
 }
 
-JsonIterator JsonIterator::end() const throw()
+JsonIterator JsonIterator::end() const noexcept
 {
     return JsonIterator(JsonConstIterator::end());
 }
@@ -363,7 +363,7 @@ void JsonBuilder::Validator::UpdateMap(
 
 // JsonBuilder
 
-JsonBuilder::JsonBuilder() throw()
+JsonBuilder::JsonBuilder() noexcept
 {
     return;
 }
@@ -378,7 +378,7 @@ JsonBuilder::JsonBuilder(JsonBuilder const& other) : m_storage(other.m_storage)
     return;
 }
 
-JsonBuilder::JsonBuilder(JsonBuilder&& other) throw()
+JsonBuilder::JsonBuilder(JsonBuilder&& other) noexcept
     : m_storage(std::move(other.m_storage))
 {
     return;
@@ -409,7 +409,7 @@ JsonBuilder& JsonBuilder::operator=(JsonBuilder const& other)
     return *this;
 }
 
-JsonBuilder& JsonBuilder::operator=(JsonBuilder&& other) throw()
+JsonBuilder& JsonBuilder::operator=(JsonBuilder&& other) noexcept
 {
     m_storage = std::move(other.m_storage);
     return *this;
@@ -423,17 +423,17 @@ void JsonBuilder::ValidateData() const
     }
 }
 
-JsonBuilder::iterator JsonBuilder::begin() throw()
+JsonBuilder::iterator JsonBuilder::begin() noexcept
 {
     return iterator(cbegin());
 }
 
-JsonBuilder::const_iterator JsonBuilder::begin() const throw()
+JsonBuilder::const_iterator JsonBuilder::begin() const noexcept
 {
     return cbegin();
 }
 
-JsonBuilder::const_iterator JsonBuilder::cbegin() const throw()
+JsonBuilder::const_iterator JsonBuilder::cbegin() const noexcept
 {
     Index index = 0;
     if (!m_storage.empty())
@@ -455,47 +455,47 @@ JsonBuilder::const_iterator JsonBuilder::cbegin() const throw()
     return const_iterator(this, index);
 }
 
-JsonBuilder::iterator JsonBuilder::end() throw()
+JsonBuilder::iterator JsonBuilder::end() noexcept
 {
     return iterator(cend());
 }
 
-JsonBuilder::const_iterator JsonBuilder::end() const throw()
+JsonBuilder::const_iterator JsonBuilder::end() const noexcept
 {
     return cend();
 }
 
-JsonBuilder::const_iterator JsonBuilder::cend() const throw()
+JsonBuilder::const_iterator JsonBuilder::cend() const noexcept
 {
     return const_iterator(this, 0);
 }
 
-JsonBuilder::iterator JsonBuilder::root() throw()
+JsonBuilder::iterator JsonBuilder::root() noexcept
 {
     return end();
 }
 
-JsonBuilder::const_iterator JsonBuilder::root() const throw()
+JsonBuilder::const_iterator JsonBuilder::root() const noexcept
 {
     return end();
 }
 
-JsonBuilder::const_iterator JsonBuilder::croot() const throw()
+JsonBuilder::const_iterator JsonBuilder::croot() const noexcept
 {
     return end();
 }
 
-JsonBuilder::size_type JsonBuilder::buffer_size() const throw()
+JsonBuilder::size_type JsonBuilder::buffer_size() const noexcept
 {
     return m_storage.size() * StorageSize;
 }
 
-void const* JsonBuilder::buffer_data() const throw()
+void const* JsonBuilder::buffer_data() const noexcept
 {
     return m_storage.data();
 }
 
-JsonBuilder::size_type JsonBuilder::buffer_capacity() const throw()
+JsonBuilder::size_type JsonBuilder::buffer_capacity() const noexcept
 {
     return m_storage.capacity() * StorageSize;
 }
@@ -510,12 +510,12 @@ void JsonBuilder::buffer_reserve(size_type cbMinimumCapacity)
     m_storage.reserve(static_cast<unsigned>(cItems));
 }
 
-void JsonBuilder::clear() throw()
+void JsonBuilder::clear() noexcept
 {
     m_storage.clear();
 }
 
-JsonBuilder::iterator JsonBuilder::erase(const_iterator itValue) throw()
+JsonBuilder::iterator JsonBuilder::erase(const_iterator itValue) noexcept
 {
     ValidateIterator(itValue);
     if (itValue.m_index == 0)
@@ -529,7 +529,7 @@ JsonBuilder::iterator JsonBuilder::erase(const_iterator itValue) throw()
 }
 
 JsonBuilder::iterator
-JsonBuilder::erase(const_iterator itBegin, const_iterator itEnd) throw()
+JsonBuilder::erase(const_iterator itBegin, const_iterator itEnd) noexcept
 {
     ValidateIterator(itBegin);
     ValidateIterator(itEnd);
@@ -549,14 +549,13 @@ JsonBuilder::erase(const_iterator itBegin, const_iterator itEnd) throw()
     return iterator(itEnd);
 }
 
-void JsonBuilder::swap(JsonBuilder& other) throw()
+void JsonBuilder::swap(JsonBuilder& other) noexcept
 {
     m_storage.swap(other.m_storage);
 }
 
 unsigned
-JsonBuilder::FindImpl(Index parentIndex, std::string_view const& name) const
-    throw()
+JsonBuilder::FindImpl(Index parentIndex, std::string_view const& name) const noexcept
 {
     Index result = 0;
     if (!m_storage.empty() && IS_COMPOSITE_TYPE(GetValue(parentIndex).m_type))
@@ -592,7 +591,7 @@ JsonBuilder::FindImpl(Index parentIndex, std::string_view const& name) const
     return result;
 }
 
-unsigned JsonBuilder::count(const_iterator const& itParent) const throw()
+unsigned JsonBuilder::count(const_iterator const& itParent) const noexcept
 {
     ValidateIterator(itParent);
 
@@ -629,19 +628,19 @@ unsigned JsonBuilder::count(const_iterator const& itParent) const throw()
     return result;
 }
 
-JsonBuilder::iterator JsonBuilder::begin(const_iterator const& itParent) throw()
+JsonBuilder::iterator JsonBuilder::begin(const_iterator const& itParent) noexcept
 {
     return iterator(cbegin(itParent));
 }
 
 JsonBuilder::const_iterator
-JsonBuilder::begin(const_iterator const& itParent) const throw()
+JsonBuilder::begin(const_iterator const& itParent) const noexcept
 {
     return cbegin(itParent);
 }
 
 JsonBuilder::const_iterator
-JsonBuilder::cbegin(const_iterator const& itParent) const throw()
+JsonBuilder::cbegin(const_iterator const& itParent) const noexcept
 {
     ValidateIterator(itParent);
     Index index = 0;
@@ -652,19 +651,19 @@ JsonBuilder::cbegin(const_iterator const& itParent) const throw()
     return const_iterator(this, index);
 }
 
-JsonBuilder::iterator JsonBuilder::end(const_iterator const& itParent) throw()
+JsonBuilder::iterator JsonBuilder::end(const_iterator const& itParent) noexcept
 {
     return iterator(cend(itParent));
 }
 
 JsonBuilder::const_iterator
-JsonBuilder::end(const_iterator const& itParent) const throw()
+JsonBuilder::end(const_iterator const& itParent) const noexcept
 {
     return cend(itParent);
 }
 
 JsonBuilder::const_iterator
-JsonBuilder::cend(const_iterator const& itParent) const throw()
+JsonBuilder::cend(const_iterator const& itParent) const noexcept
 {
     ValidateIterator(itParent);
     Index index = 0;
@@ -718,19 +717,19 @@ JsonBuilder::iterator JsonBuilder::AddValue(
     return iterator(const_iterator(this, newIndex));
 }
 
-void JsonBuilder::AssertNotEnd(Index index) throw()
+void JsonBuilder::AssertNotEnd(Index index) noexcept
 {
     (void) index;  // Unreferenced parameter in release builds.
     assert(index != 0);
 }
 
-void JsonBuilder::AssertHidden(JsonType type) throw()
+void JsonBuilder::AssertHidden(JsonType type) noexcept
 {
     (void) type;  // Unreferenced parameter in release builds.
     assert(type == JsonHidden);
 }
 
-void JsonBuilder::ValidateIterator(const_iterator const& it) const throw()
+void JsonBuilder::ValidateIterator(const_iterator const& it) const noexcept
 {
     assert(it.m_index == 0 || it.m_index < m_storage.size());
 
@@ -741,7 +740,7 @@ void JsonBuilder::ValidateIterator(const_iterator const& it) const throw()
     }
 }
 
-void JsonBuilder::ValidateParentIterator(Index index) const throw()
+void JsonBuilder::ValidateParentIterator(Index index) const noexcept
 {
     assert(!m_storage.empty());
 
@@ -752,33 +751,33 @@ void JsonBuilder::ValidateParentIterator(Index index) const throw()
     }
 }
 
-bool JsonBuilder::CanIterateOver(const_iterator const& it) const throw()
+bool JsonBuilder::CanIterateOver(const_iterator const& it) const noexcept
 {
     return !m_storage.empty() && IS_COMPOSITE_TYPE(GetValue(it.m_index).m_type);
 }
 
-JsonValue const& JsonBuilder::GetValue(Index index) const throw()
+JsonValue const& JsonBuilder::GetValue(Index index) const noexcept
 {
     return reinterpret_cast<JsonValue const&>(m_storage[index]);
 }
 
-JsonValue& JsonBuilder::GetValue(Index index) throw()
+JsonValue& JsonBuilder::GetValue(Index index) noexcept
 {
     return reinterpret_cast<JsonValue&>(m_storage[index]);
 }
 
-JsonBuilder::Index JsonBuilder::FirstChild(Index index) const throw()
+JsonBuilder::Index JsonBuilder::FirstChild(Index index) const noexcept
 {
     auto cchName = reinterpret_cast<JsonValue const&>(m_storage[index]).m_cchName;
     return index + DATA_OFFSET(cchName);
 }
 
-JsonBuilder::Index JsonBuilder::LastChild(Index index) const throw()
+JsonBuilder::Index JsonBuilder::LastChild(Index index) const noexcept
 {
     return reinterpret_cast<JsonValue const&>(m_storage[index]).m_lastChildIndex;
 }
 
-JsonBuilder::Index JsonBuilder::NextIndex(Index index) const throw()
+JsonBuilder::Index JsonBuilder::NextIndex(Index index) const noexcept
 {
     assert(index < m_storage.size());
     auto pValue = reinterpret_cast<JsonValue const*>(m_storage.data() + index);
@@ -906,7 +905,7 @@ JsonBuilder::Index JsonBuilder::CreateValue(
     return valueIndex;
 }
 
-void swap(JsonBuilder& a, JsonBuilder& b) throw()
+void swap(JsonBuilder& a, JsonBuilder& b) noexcept
 {
     a.swap(b);
 }
@@ -932,7 +931,7 @@ and i32) aren't perfectly optimal... But they're probably close enough.
 
 #define IMPLEMENT_GetUnchecked(DataType, ValueType)                   \
     DataType JsonImplementType<DataType>::GetUnchecked(               \
-        JsonValue const& value) throw()                               \
+        JsonValue const& value) noexcept                              \
     {                                                                 \
         return static_cast<DataType>(GetUnchecked##ValueType(value)); \
     }
@@ -942,14 +941,14 @@ and i32) aren't perfectly optimal... But they're probably close enough.
     IMPLEMENT_GetUnchecked(DataType, ValueType);                  \
                                                                   \
     bool JsonImplementType<DataType>::ConvertTo(                  \
-        JsonValue const& value, DataType& result) throw()         \
+        JsonValue const& value, DataType& result) noexcept        \
     {                                                             \
         return ConvertTo##ValueType(value, result);               \
     }
 
 // JsonBool
 
-bool JsonImplementType<bool>::GetUnchecked(JsonValue const& value) throw()
+bool JsonImplementType<bool>::GetUnchecked(JsonValue const& value) noexcept
 {
     assert(value.Type() == JsonBool);
     bool result;
@@ -971,7 +970,7 @@ bool JsonImplementType<bool>::GetUnchecked(JsonValue const& value) throw()
     return result;
 }
 
-bool JsonImplementType<bool>::ConvertTo(JsonValue const& value, bool& result) throw()
+bool JsonImplementType<bool>::ConvertTo(JsonValue const& value, bool& result) noexcept
 {
     bool success;
     switch (value.Type())
@@ -994,7 +993,7 @@ IMPLEMENT_AddValue(bool, sizeof(data), &data, JsonBool);
 
 bool JsonImplementType<unsigned long long>::ConvertTo(
     JsonValue const& value,
-    unsigned long long& result) throw()
+    unsigned long long& result) noexcept
 {
     static double const UnsignedHuge = 18446744073709551616.0;
 
@@ -1098,7 +1097,7 @@ IMPLEMENT_JsonImplementType(unsigned long, JsonUInt);
 
 bool JsonImplementType<signed long long>::ConvertTo(
     JsonValue const& value,
-    signed long long& result) throw()
+    signed long long& result) noexcept
 {
     static double const SignedHuge = 9223372036854775808.0;
 
@@ -1203,7 +1202,7 @@ IMPLEMENT_JsonImplementType(signed long, JsonInt);
 
 // JsonFloat
 
-double JsonImplementType<double>::GetUnchecked(JsonValue const& value) throw()
+double JsonImplementType<double>::GetUnchecked(JsonValue const& value) noexcept
 {
     assert(value.Type() == JsonFloat);
     double result;
@@ -1227,7 +1226,7 @@ double JsonImplementType<double>::GetUnchecked(JsonValue const& value) throw()
 
 bool JsonImplementType<double>::ConvertTo(
     JsonValue const& value,
-    double& result) throw()
+    double& result) noexcept
 {
     bool success;
 
@@ -1289,7 +1288,7 @@ JsonIterator JsonImplementType<char*>::AddValue(
 }
 
 std::string_view
-JsonImplementType<std::string_view>::GetUnchecked(JsonValue const& value) throw()
+JsonImplementType<std::string_view>::GetUnchecked(JsonValue const& value) noexcept
 {
     assert(value.Type() == JsonUtf8);
     unsigned cb;
@@ -1299,7 +1298,7 @@ JsonImplementType<std::string_view>::GetUnchecked(JsonValue const& value) throw(
 
 bool JsonImplementType<std::string_view>::ConvertTo(
     JsonValue const& value,
-    std::string_view& result) throw()
+    std::string_view& result) noexcept
 {
     bool success;
 
@@ -1342,14 +1341,14 @@ JsonIterator JsonImplementType<std::chrono::system_clock::time_point>::AddValue(
     std::string_view const& name,
     std::chrono::system_clock::time_point const& data)
 {
-    auto const ft = FileTime1970Ticks + std::chrono::duration_cast<ticks>(data.time_since_epoch()).count();
+    uint64_t const ft = FileTime1970Ticks + std::chrono::duration_cast<ticks>(data.time_since_epoch()).count();
     auto const timeStruct = TimeStruct::FromValue(ft);
     return builder.AddValue(front, itParent, name, JsonTime, sizeof(timeStruct), &timeStruct);
 }
 
 bool JsonImplementType<std::chrono::system_clock::time_point>::ConvertTo(
     JsonValue const& jsonValue,
-    std::chrono::system_clock::time_point& value) throw()
+    std::chrono::system_clock::time_point& value) noexcept
 {
     bool success;
 
@@ -1369,7 +1368,7 @@ bool JsonImplementType<std::chrono::system_clock::time_point>::ConvertTo(
 
 std::chrono::system_clock::time_point
 JsonImplementType<std::chrono::system_clock::time_point>::GetUnchecked(
-    JsonValue const& jsonValue) throw()
+    JsonValue const& jsonValue) noexcept
 {
     assert(jsonValue.Type() == JsonTime);
     assert(jsonValue.DataSize() == sizeof(TimeStruct));
@@ -1392,7 +1391,7 @@ IMPLEMENT_AddValue(TimeStruct, sizeof(TimeStruct), &data, JsonTime);
 
 bool JsonImplementType<TimeStruct>::ConvertTo(
     JsonValue const& jsonValue,
-    TimeStruct& value) throw()
+    TimeStruct& value) noexcept
 {
     bool success;
 
@@ -1412,7 +1411,7 @@ bool JsonImplementType<TimeStruct>::ConvertTo(
 }
 
 TimeStruct
-JsonImplementType<TimeStruct>::GetUnchecked(JsonValue const& jsonValue) throw()
+JsonImplementType<TimeStruct>::GetUnchecked(JsonValue const& jsonValue) noexcept
 {
     assert(jsonValue.Type() == JsonTime);
     assert(jsonValue.DataSize() == sizeof(TimeStruct));
@@ -1428,7 +1427,7 @@ IMPLEMENT_AddValue(UuidStruct, sizeof(UuidStruct), &data, JsonUuid);
 
 bool JsonImplementType<UuidStruct>::ConvertTo(
     JsonValue const& jsonValue,
-    UuidStruct& value) throw()
+    UuidStruct& value) noexcept
 {
     bool success;
 
@@ -1448,7 +1447,7 @@ bool JsonImplementType<UuidStruct>::ConvertTo(
 }
 
 UuidStruct const&
-JsonImplementType<UuidStruct>::GetUnchecked(JsonValue const& jsonValue) throw()
+JsonImplementType<UuidStruct>::GetUnchecked(JsonValue const& jsonValue) noexcept
 {
     assert(jsonValue.Type() == JsonUuid);
     assert(jsonValue.DataSize() == sizeof(UuidStruct));

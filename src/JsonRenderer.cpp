@@ -3,8 +3,13 @@
 
 #include <jsonbuilder/JsonRenderer.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
 #define __USE_TIME_BITS64
 #include <time.h>
+static_assert(sizeof(time_t) == 8, "time_t must be 64 bits");
+#endif
 
 #include <cassert>
 #include <cmath>
@@ -12,8 +17,6 @@
 #include <cstring>
 #include <charconv>
 #include <limits>
-
-static_assert(sizeof(time_t) == 8, "time_t must be 64 bits");
 
 #ifndef _Out_writes_
 #define _Out_writes_(c)
@@ -23,7 +26,8 @@ static_assert(sizeof(time_t) == 8, "time_t must be 64 bits");
 #define WriteChars(pch, cch) m_renderBuffer.append(pch, cch)
 
 auto constexpr TicksPerSecond = 10'000'000u;
-auto constexpr FileTime1970 = 116444736000000000;
+auto constexpr FileTime1970Ticks = 116444736000000000u;
+auto constexpr FileTime10000Ticks = 2650467744000000000u;
 using ticks = std::chrono::duration<std::int64_t, std::ratio<1, TicksPerSecond>>;
 
 namespace jsonbuilder {
@@ -83,17 +87,17 @@ static unsigned JsonRenderXInt(N const& n, _Out_writes_z_(CB) char* pBuffer)
     return cch;
 }
 
-unsigned JsonRenderUInt(long long unsigned n, _Out_writes_z_(21) char* pBuffer) throw()
+unsigned JsonRenderUInt(long long unsigned n, _Out_writes_z_(21) char* pBuffer) noexcept
 {
     return JsonRenderXInt<21>(n, pBuffer);
 }
 
-unsigned JsonRenderInt(long long signed n, _Out_writes_z_(21) char* pBuffer) throw()
+unsigned JsonRenderInt(long long signed n, _Out_writes_z_(21) char* pBuffer) noexcept
 {
     return JsonRenderXInt<21>(n, pBuffer);
 }
 
-unsigned JsonRenderFloat(double n, _Out_writes_z_(32) char* pBuffer) throw()
+unsigned JsonRenderFloat(double n, _Out_writes_z_(32) char* pBuffer) noexcept
 {
     auto const CB = 32u;
     unsigned cch;
@@ -121,64 +125,111 @@ unsigned JsonRenderFloat(double n, _Out_writes_z_(32) char* pBuffer) throw()
     return cch;
 }
 
-unsigned JsonRenderBool(bool b, _Out_writes_z_(6) char* pBuffer) throw()
+unsigned JsonRenderBool(bool b, _Out_writes_z_(6) char* pBuffer) noexcept
 {
     return b ? MemCpyFromLiteral(pBuffer, "true") : MemCpyFromLiteral(pBuffer, "false");
 }
 
-unsigned JsonRenderNull(_Out_writes_z_(5) char* pBuffer) throw()
+unsigned JsonRenderNull(_Out_writes_z_(5) char* pBuffer) noexcept
 {
     return MemCpyFromLiteral(pBuffer, "null");
 }
 
-static unsigned RenderTicks1970(time_t seconds1970, unsigned subsecondTicks, _Out_writes_z_(29) char* pBuffer) throw()
+static unsigned
+RenderFileTime(uint64_t ft, _Out_writes_z_(29) char* pBuffer) noexcept
 {
-    tm timeStruct = {};
+    // Only attempt to render years between 1601 and 9999.
+    if (ft < FileTime10000Ticks)
+    {
+        auto const subsecondTicks = static_cast<unsigned>(ft % TicksPerSecond);
+
 #ifdef _WIN32
-    _gmtime64_s(&timeStruct, &seconds1970);
+        SYSTEMTIME st;
+        if (!FileTimeToSystemTime(reinterpret_cast<FILETIME const*>(&ft), &st))
+        {
+            assert(false); // Unexpected - should succeed for all values 1601..32000.
+            goto NotOk;
+        }
+
+        auto const year = st.wYear;
+        auto const month = st.wMonth;
+        auto const day = st.wDay;
+        auto const hour = st.wHour;
+        auto const minute = st.wMinute;
+        auto const second = st.wSecond;
 #else
-    gmtime_r(&seconds1970, &timeStruct);
+        auto const seconds1601 = ft / TicksPerSecond;
+        time_t const seconds1970 = static_cast<int64_t>(seconds1601) - (FileTime1970Ticks / TicksPerSecond);
+
+        tm timeStruct;
+        if (0 == gmtime_r(&seconds1970, &timeStruct))
+        {
+            goto NotOk;
+        }
+
+        auto const year = static_cast<unsigned>(timeStruct.tm_year + 1900);
+        auto const month = static_cast<unsigned>(timeStruct.tm_mon + 1);
+        auto const day = static_cast<unsigned>(timeStruct.tm_mday);
+        auto const hour = static_cast<unsigned>(timeStruct.tm_hour);
+        auto const minute = static_cast<unsigned>(timeStruct.tm_min);
+        auto const second = static_cast<unsigned>(timeStruct.tm_sec);
 #endif
 
-    FormatUint(static_cast<unsigned>(timeStruct.tm_year + 1900), pBuffer + 0, 4);
-    pBuffer[4] = '-';
-    FormatUint(static_cast<unsigned>(timeStruct.tm_mon + 1), pBuffer + 5, 2);
-    pBuffer[7] = '-';
-    FormatUint(static_cast<unsigned>(timeStruct.tm_mday), pBuffer + 8, 2);
-    pBuffer[10] = 'T';
-    FormatUint(static_cast<unsigned>(timeStruct.tm_hour), pBuffer + 11, 2);
-    pBuffer[13] = ':';
-    FormatUint(static_cast<unsigned>(timeStruct.tm_min), pBuffer + 14, 2);
-    pBuffer[16] = ':';
-    FormatUint(static_cast<unsigned>(timeStruct.tm_sec), pBuffer + 17, 2);
-    pBuffer[19] = '.';
-    FormatUint(subsecondTicks, pBuffer + 20, 7);
-    pBuffer[27] = 'Z';
-    pBuffer[28] = 0;
+        FormatUint(year, pBuffer + 0, 4);
+        pBuffer[4] = '-';
+        FormatUint(month, pBuffer + 5, 2);
+        pBuffer[7] = '-';
+        FormatUint(day, pBuffer + 8, 2);
+        pBuffer[10] = 'T';
+        FormatUint(hour, pBuffer + 11, 2);
+        pBuffer[13] = ':';
+        FormatUint(minute, pBuffer + 14, 2);
+        pBuffer[16] = ':';
+        FormatUint(second, pBuffer + 17, 2);
+        pBuffer[19] = '.';
+        FormatUint(subsecondTicks, pBuffer + 20, 7);
+        pBuffer[27] = 'Z';
+        pBuffer[28] = 0;
+    }
+    else
+    {
+    NotOk:
+
+        // Unable to print a nice date-time. Print the raw FILETIME instead,
+        // something like "FILETIME(0x0000000000000000)" (still 28 chars).
+        auto p = pBuffer;
+        p += MemCpyFromLiteral(p, "FILETIME(0x");
+
+        auto const pData = reinterpret_cast<unsigned char const*>(&ft);
+        for (unsigned i = 0; i != 8; i += 1)
+        {
+            p += u8_to_hex_upper(pData[7u - i], p);
+        }
+
+        p += MemCpyFromLiteral(p, ")");
+        assert(p == pBuffer + 28);
+        assert(pBuffer[28] == 0);
+    }
+
     return 28;
 }
 
 unsigned JsonRenderTime(
     TimeStruct const t,
-    _Out_writes_z_(29) char* pBuffer) throw()
+    _Out_writes_z_(29) char* pBuffer) noexcept
 {
-    auto const ft = t.Value();
-    time_t const seconds = ft / TicksPerSecond;
-    auto const subsecondTicks = static_cast<unsigned>(ft % TicksPerSecond);
-    return RenderTicks1970(seconds + (FileTime1970 / TicksPerSecond), subsecondTicks, pBuffer);
+    return RenderFileTime(t.Value(), pBuffer);
 }
 
 unsigned JsonRenderTime(
     std::chrono::system_clock::time_point const timePoint,
-    _Out_writes_z_(29) char* pBuffer) throw()
+    _Out_writes_z_(29) char* pBuffer) noexcept
 {
-    auto const ticks1970 = std::chrono::duration_cast<ticks>(timePoint.time_since_epoch()).count();
-    time_t const seconds1970 = ticks1970 / TicksPerSecond;
-    auto const subsecondTicks = static_cast<unsigned>(ticks1970 % TicksPerSecond);
-    return RenderTicks1970(seconds1970, subsecondTicks, pBuffer);
+    uint64_t const ft = FileTime1970Ticks + std::chrono::duration_cast<ticks>(timePoint.time_since_epoch()).count();
+    return RenderFileTime(ft, pBuffer);
 }
 
-unsigned JsonRenderUuid(_In_reads_(16) char unsigned const* g, _Out_writes_z_(37) char* pBuffer) throw()
+unsigned JsonRenderUuid(_In_reads_(16) char unsigned const* g, _Out_writes_z_(37) char* pBuffer) noexcept
 {
     u8_to_hex_upper(g[0], pBuffer + 0);
     u8_to_hex_upper(g[1], pBuffer + 2);
@@ -204,7 +255,7 @@ unsigned JsonRenderUuid(_In_reads_(16) char unsigned const* g, _Out_writes_z_(37
     return 36;
 }
 
-unsigned JsonRenderUuidWithBraces(_In_reads_(16) char unsigned const* g, _Out_writes_z_(39) char* pBuffer) throw()
+unsigned JsonRenderUuidWithBraces(_In_reads_(16) char unsigned const* g, _Out_writes_z_(39) char* pBuffer) noexcept
 {
     pBuffer[0] = '{';
     JsonRenderUuid(g, pBuffer + 1);
@@ -221,7 +272,7 @@ JsonRenderer::~JsonRenderer()
 JsonRenderer::JsonRenderer(
     bool pretty,
     std::string_view newLine,
-    unsigned indentSpaces) throw()
+    unsigned indentSpaces) noexcept
     : m_newLine(newLine), m_indentSpaces(indentSpaces), m_indent(0), m_pretty(pretty)
 {
     return;
@@ -232,42 +283,42 @@ void JsonRenderer::Reserve(size_type cb)
     m_renderBuffer.reserve(cb);
 }
 
-JsonRenderer::size_type JsonRenderer::Size() const throw()
+JsonRenderer::size_type JsonRenderer::Size() const noexcept
 {
     return m_renderBuffer.size();
 }
 
-JsonRenderer::size_type JsonRenderer::Capacity() const throw()
+JsonRenderer::size_type JsonRenderer::Capacity() const noexcept
 {
     return m_renderBuffer.capacity();
 }
 
-bool JsonRenderer::Pretty() const throw()
+bool JsonRenderer::Pretty() const noexcept
 {
     return m_pretty;
 }
 
-void JsonRenderer::Pretty(bool value) throw()
+void JsonRenderer::Pretty(bool value) noexcept
 {
     m_pretty = value;
 }
 
-std::string_view JsonRenderer::NewLine() const throw()
+std::string_view JsonRenderer::NewLine() const noexcept
 {
     return m_newLine;
 }
 
-void JsonRenderer::NewLine(std::string_view const value) throw()
+void JsonRenderer::NewLine(std::string_view const value) noexcept
 {
     m_newLine = value;
 }
 
-unsigned JsonRenderer::IndentSpaces() const throw()
+unsigned JsonRenderer::IndentSpaces() const noexcept
 {
     return m_indentSpaces;
 }
 
-void JsonRenderer::IndentSpaces(unsigned value) throw()
+void JsonRenderer::IndentSpaces(unsigned value) noexcept
 {
     m_indentSpaces = value;
 }
@@ -435,7 +486,7 @@ void JsonRenderer::RenderTime(TimeStruct value)
 {
     auto pch = m_renderBuffer.GetAppendPointer(32);
     *pch++ = '"';
-    pch += JsonRenderTime(value, pch);
+    pch += RenderFileTime(value.Value(), pch);
     *pch++ = '"';
     m_renderBuffer.SetEndPointer(pch);
 }

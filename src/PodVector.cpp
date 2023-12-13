@@ -8,14 +8,14 @@
 
 namespace jsonbuilder { namespace JsonInternal {
 
-void PodVectorBase::CheckOffset(size_type index, size_type currentSize) throw()
+void PodVectorBase::CheckOffset(size_type index, size_type currentSize) noexcept
 {
     (void) index;        // Unreferenced parameter
     (void) currentSize;  // Unreferenced parameter
     assert(index < currentSize);
 }
 
-void PodVectorBase::CheckRange(void const* p1, void const* p2, void const* p3) throw()
+void PodVectorBase::CheckRange(void const* p1, void const* p2, void const* p3) noexcept
 {
     (void) p1;  // Unreferenced parameter
     (void) p2;  // Unreferenced parameter
@@ -36,7 +36,7 @@ PodVectorBase::size_type PodVectorBase::CheckedAdd(size_type a, size_type b)
 void PodVectorBase::InitData(
     _Out_writes_bytes_(cb) void* pDest,
     _In_reads_bytes_(cb) void const* pSource,
-    std::size_t cb) throw()
+    std::size_t cb) noexcept
 {
     memcpy(pDest, pSource, cb);
 }
@@ -105,7 +105,7 @@ void* PodVectorBase::Allocate(size_t cb, bool zeroInitializeMemory)
     return pbNew;
 }
 
-void PodVectorBase::Deallocate(void* pb) throw()
+void PodVectorBase::Deallocate(void* pb) noexcept
 {
     if (pb)
     {
