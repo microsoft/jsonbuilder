@@ -101,6 +101,9 @@ namespace jsonbuilder
 #ifndef _In_reads_bytes_
 #define _In_reads_bytes_(cb)
 #endif
+#ifndef _In_reads_bytes_opt_
+#define _In_reads_bytes_opt_(cb)
+#endif
 #ifndef _Out_opt_
 #define _Out_opt_
 #endif
@@ -465,6 +468,39 @@ class PodVector : private PodVectorBase
         m_capacity = newCapacity;
     }
 };
+
+// Determine whether a type can be accepted as a CHAR for StringTypeOk.
+template<class CH, class = void> struct CharTypeOk {};
+template<class CH>
+struct CharTypeOk<CH, typename std::enable_if<
+    !std::is_array<CH>::value &&
+    std::is_trivial<CH>::value &&
+    std::is_standard_layout<CH>::value &&
+    (sizeof(CH) == 1 || sizeof(CH) == 2 || sizeof(CH) == 4)>::type>
+{
+    using type = typename std::remove_cv<CH>::type;
+    using char_type =
+        typename std::conditional<sizeof(CH) == 1, char,
+        typename std::conditional<sizeof(CH) == 2, char16_t,
+        char32_t>::type>::type;
+    static_assert(sizeof(type) == sizeof(char_type), "Bad type");
+};
+
+// Determine whether a type can be accepted as string_view for AddValue.
+template<class T, class = void> struct StringTypeOk {};
+
+// Pointer to CHAR is ok.
+template<class CH> struct StringTypeOk<CH*, void> : CharTypeOk<CH> {};
+
+// Array of CHAR is ok.
+template<class CH, JSON_SIZE_T N> struct StringTypeOk<CH[N], void> : CharTypeOk<CH> {};
+
+// Object is ok if data(obj) is a CHAR* and size(obj) is a number.
+template<class T> struct StringTypeOk<T, std::void_t<
+    decltype(*data(std::declval<T>())),
+    decltype(0u+size(std::declval<T>()))>>
+    : CharTypeOk<typename std::remove_reference<decltype(*data(std::declval<T>()))>::type> {};
+
 }  // namespace JsonInternal
 // namespace JsonInternal
 
@@ -633,9 +669,9 @@ class JsonValue : private JsonValueBase
      4: m_cchName   (3 bytes)
      7: m_type      (1 byte)
      8: m_cbData    (4 bytes)
-    12: Name        (cchName * 2 bytes)
+    12: Name        (cchName bytes)
     xx: Padding     (to a multiple of StoragePod size)
-    xx: Data        (cbValue bytes)
+    xx: Data        (m_cbData bytes)
     xx: Padding     (to a multiple of StoragePod size)
 
     Composite node format (array or object):
@@ -643,7 +679,7 @@ class JsonValue : private JsonValueBase
      4: m_cchName        (3 bytes)
      7: m_type           (1 byte)  // JsonObject, JsonArray.
      8: m_lastChildIndex (4 bytes)
-    12: Name             (cchName * 2 bytes)
+    12: Name             (cchName bytes)
     xx: Padding          (to a multiple of StoragePod size)
     xx: FirstChild       (8 bytes) - a sentinel node.
 
@@ -887,43 +923,16 @@ iterator" parameter, use the root() iterator to refer to the root of the tree.
 class JsonBuilder
 {
     friend class JsonConstIterator;
-    typedef JsonValue::Index Index;
-    typedef JsonInternal::PodVector<JsonValue::StoragePod> StorageVec;
+    using StoragePod = JsonValue::StoragePod;
+    using Index = JsonValue::Index;
+    using StorageVec = JsonInternal::PodVector<JsonValue::StoragePod>;
+    class RestoreOldSize;
+    class Validator;
+    static_assert(sizeof(JsonValueBase) % sizeof(StoragePod) == 0, "Bad JsonValueBase size");
+    static_assert(sizeof(JsonValue) % sizeof(StoragePod) == 0, "Bad JsonValue size");
+    static constexpr unsigned RootSize = (sizeof(JsonValue) + sizeof(JsonValueBase)) / sizeof(StoragePod);
+
     StorageVec m_storage;
-
-    class Validator : private JsonInternal::PodVectorBase
-    {
-        // 2-bit value.
-        enum ValidationState : char unsigned
-        {
-            ValNone = 0,
-            ValTail = 1,
-            ValHead = 2,
-            ValReached = 3,
-            ValMax
-        };
-
-        JsonValue::StoragePod const* const m_pStorage;
-        size_type const m_size;
-        char unsigned* const m_pMap;  // 2 bits per StoragePod in m_pStorage.
-
-      public:
-        ~Validator();
-
-        explicit Validator(
-            _In_reads_(cStorage) JsonValue::StoragePod const* pStorage,
-            size_type cStorage)
-            noexcept(false);  // may throw bad_alloc
-
-        void Validate()
-            noexcept(false);  // may throw invalid_argument
-
-      private:
-        void ValidateRecurse(Index index) noexcept(false);
-
-        void
-        UpdateMap(Index index, ValidationState expectedVal, ValidationState newVal) noexcept(false);
-    };
 
   public:
     using value_type = JsonValue;
@@ -1254,172 +1263,313 @@ class JsonBuilder
     }
 
     /*
-    Creates a new value. Inserts it as the first (if front is true) or last
+    Creates a new value with the given name and data.
+    Inserts the value as the first (if front is true) or last
     (if front is false) child of itParent.
+
+    Name must be a string-view-like thing (pointer to nul-terminated
+    array of CHARs, or contiguous container of CHARs), where CHAR is one
+    of char, char8_t, char16_t, char32_t, or wchar_t. The string is
+    assumed to be UTF-8, UTF-16, or UTF-32 based on sizeof(CHAR).
+
     If pbData is null, the new value's payload is uninitialized.
     Requires: itParent must reference an array or an object value.
-    Requires: if type is Array or Object, cbValue must be 0 and pbValue must be
+    Requires: if type is Array or Object, cbData must be 0 and pbData must be
     null. Returns: an iterator that references the new value. O(1).
     */
+    template<class NameStringView, class NameChar = typename JsonInternal::StringTypeOk<NameStringView>::type>
     iterator AddValue(
         bool front,
         const_iterator const& itParent,
-        std::string_view const& name,
+        NameStringView const& name,
         JsonType type,
         unsigned cbData = 0,
         _In_reads_bytes_(cbData) void const* pbData = nullptr)
+        noexcept(false)  // may throw bad_alloc, length_error
+    {
+        std::basic_string_view<NameChar> nameView{ name };
+        return AddValueImpl(front, itParent, nameView, type, cbData, pbData);
+    }
+
+    /*
+    Creates a new value with the given name and data.
+    Inserts the value as the first child of itParent.
+
+    Name must be a string-view-like thing (pointer to nul-terminated
+    array of CHARs, or contiguous container of CHARs), where CHAR is one
+    of char, char8_t, char16_t, char32_t, or wchar_t. The string is
+    assumed to be UTF-8, UTF-16, or UTF-32 based on sizeof(CHAR).
+
+    If pbData is null, the new value's payload is uninitialized.
+    Requires: itParent must reference an array or an object value.
+    Requires: if type is Array or Object, cbData must be 0 and pbData must be
+    null. Returns: an iterator that references the new value. O(1).
+    */
+    template<class NameStringView, class NameChar = typename JsonInternal::StringTypeOk<NameStringView>::type>
+    iterator push_front(
+        const_iterator const& itParent,
+        NameStringView const& name,
+        JsonType type,
+        unsigned cbData = 0,
+        _In_reads_bytes_(cbData) void const* pbData = nullptr)
+        noexcept(false) // may throw bad_alloc, length_error
+    {
+        std::basic_string_view<NameChar> nameView{ name };
+        return AddValueImpl(true, itParent, nameView, type, cbData, pbData);
+    }
+
+    /*
+    Creates a new value with the given name and data.
+    Inserts the value as the last child of itParent.
+
+    Name must be a string-view-like thing (pointer to nul-terminated
+    array of CHARs, or contiguous container of CHARs), where CHAR is one
+    of char, char8_t, char16_t, char32_t, or wchar_t. The string is
+    assumed to be UTF-8, UTF-16, or UTF-32 based on sizeof(CHAR).
+
+    If pbData is null, the new value's payload is uninitialized.
+    Requires: itParent must reference an array or an object value.
+    Requires: if type is Array or Object, cbData must be 0 and pbData must be
+    null. Returns: an iterator that references the new value. O(1).
+    */
+    template<class NameStringView, class NameChar = typename JsonInternal::StringTypeOk<NameStringView>::type>
+    iterator push_back(
+        const_iterator const& itParent,
+        NameStringView const& name,
+        JsonType type,
+        unsigned cbData = 0,
+        _In_reads_bytes_(cbData) void const* pbData = nullptr)
+        noexcept(false) // may throw bad_alloc, length_error
+    {
+        std::basic_string_view<NameChar> nameView{ name };
+        return AddValueImpl(false, itParent, nameView, type, cbData, pbData);
+    }
+
+    /*
+    Creates a new value with the given name and data.
+    Inserts the value as the first (if front is true) or last
+    (if front is false) child of itParent.
+
+    Name must be a string-view-like thing (pointer to nul-terminated
+    array of CHARs, or contiguous container of CHARs), where CHAR is one
+    of char, char8_t, char16_t, char32_t, or wchar_t. The string is
+    assumed to be UTF-8, UTF-16, or UTF-32 based on sizeof(CHAR).
+
+    Data must be a supported type. Supported types include:
+
+    - For boolean data: bool.
+    - For UTF-8 string data: std::string_view, char*.
+    - For integer data: signed and unsigned char, short, int, long, long long.
+    - For float data: float, double.
+    - For time data: TimeStruct, std::chrono::system_clock::time_point.
+    - For UUID data: UuidStruct.
+    - Any user-defined type for which JsonImplementType<T>::AddValueCommit
+      exists.
+
+    We specifically do not support char because the intent is ambiguous.
+    Convert a char to string_view, signed char, or unsigned char, as appropriate.
+
+    Requires: itParent must reference an array or an object value.
+    Returns: an iterator that references the new value.
+    O(1).
+    */
+    template<
+        class T,
+        class NameStringView,
+        class NameChar = typename JsonInternal::StringTypeOk<NameStringView>::type,
+        class EnableIfType =
+            decltype(JsonImplementType<typename std::decay<T>::type>::AddValueCommit)>
+    iterator AddValue(
+        bool front,
+        const_iterator const& itParent,
+        NameStringView const& name,
+        T const& data)
+        noexcept(false) // may throw bad_alloc, length_error
+    {
+        std::basic_string_view<NameChar> nameView{ name };
+        return AddValueImpl(front, itParent, nameView, data);
+    }
+
+    /*
+    Creates a new value with the given name and data.
+    Inserts the value as the first child of itParent.
+
+    Name must be a string-view-like thing (pointer to nul-terminated
+    array of CHARs, or contiguous container of CHARs), where CHAR is one
+    of char, char8_t, char16_t, char32_t, or wchar_t. The string is
+    assumed to be UTF-8, UTF-16, or UTF-32 based on sizeof(CHAR).
+
+    Data must be a supported type. Supported types include:
+
+    - For boolean data: bool.
+    - For UTF-8 string data: std::string_view, char*.
+    - For integer data: signed and unsigned char, short, int, long, long long.
+    - For float data: float, double.
+    - For time data: TimeStruct, std::chrono::system_clock::time_point.
+    - For UUID data: UuidStruct.
+    - Any user-defined type for which JsonImplementType<T>::AddValueCommit
+      exists.
+
+    We specifically do not support char because the intent is ambiguous.
+    Convert a char to string_view, signed char, or unsigned char, as appropriate.
+
+    Requires: itParent must reference an array or an object value.
+    Returns: an iterator that references the new value.
+    O(1).
+    */
+    template<
+        class T,
+        class NameStringView,
+        class NameChar = typename JsonInternal::StringTypeOk<NameStringView>::type,
+        class EnableIfType =
+            decltype(JsonImplementType<typename std::decay<T>::type>::AddValueCommit)>
+    iterator push_front(
+        const_iterator const& itParent,
+        NameStringView const& name,
+        T const& data)
+        noexcept(false) // may throw bad_alloc, length_error
+    {
+        std::basic_string_view<NameChar> nameView{ name };
+        return AddValueImpl(true, itParent, nameView, data);
+    }
+
+    /*
+    Creates a new value with the given name and data.
+    Inserts the value as the last child of itParent.
+
+    Name must be a string-view-like thing (pointer to nul-terminated
+    array of CHARs, or contiguous container of CHARs), where CHAR is one
+    of char, char8_t, char16_t, char32_t, or wchar_t. The string is
+    assumed to be UTF-8, UTF-16, or UTF-32 based on sizeof(CHAR).
+
+    Data must be a supported type. Supported types include:
+
+    - For boolean data: bool.
+    - For UTF-8 string data: std::string_view, char*.
+    - For integer data: signed and unsigned char, short, int, long, long long.
+    - For float data: float, double.
+    - For time data: TimeStruct, std::chrono::system_clock::time_point.
+    - For UUID data: UuidStruct.
+    - Any user-defined type for which JsonImplementType<T>::AddValueCommit
+      exists.
+
+    We specifically do not support char because the intent is ambiguous.
+    Convert a char to string_view, signed char, or unsigned char, as appropriate.
+
+    Requires: itParent must reference an array or an object value.
+    Returns: an iterator that references the new value.
+    O(1).
+    */
+    template<
+        class T,
+        class NameStringView,
+        class NameChar = typename JsonInternal::StringTypeOk<NameStringView>::type,
+        class EnableIfType =
+            decltype(JsonImplementType<typename std::decay<T>::type>::AddValueCommit)>
+    iterator push_back(
+        const_iterator const& itParent,
+        NameStringView const& name,
+        T const& data)
+        noexcept(false) // may throw bad_alloc, length_error
+    {
+        std::basic_string_view<NameChar> nameView{ name };
+        return AddValueImpl(false, itParent, nameView, data);
+    }
+
+    /*
+    Advanced scenarios: Should only be called by JsonImplementType<T>::AddValueCommit
+    that itself was called by JsonBuilder. Sets the size and type of the new value that
+    is under construction. If pbData is not null, copies the provided data into the new
+    value. If pbData is null, the new value's payload must be initialized by the caller.
+
+    Requires: a value is under construction (a call to AddValue is in progress).
+    Requires: if type is Array or Object, cbData must be 0 and pbData must be null.
+    Returns: an iterator to the new item. O(1).
+    */
+    iterator
+    _newValueCommit(
+        JsonType type,
+        unsigned cbData,
+        _In_reads_bytes_opt_(cbData) void const* pbData)
         noexcept(false);  // may throw bad_alloc, length_error
 
-    /*
-    Creates a new value. Inserts it as the first child of itParent.
-    If pbData is null, the new value's payload is uninitialized.
-    Requires: itParent must reference an array or an object value.
-    Requires: if type is Array or Object, cbValue must be 0 and pbValue must be
-    null. Returns: an iterator that references the new value. O(1).
-    */
-    iterator push_front(
-        const_iterator const& itParent,
-        std::string_view const& name,
-        JsonType type,
-        unsigned cbData = 0,
-        _In_reads_bytes_(cbData) void const* pbData = nullptr)
-        noexcept(false) // may throw bad_alloc, length_error
-    {
-        return AddValue(true, itParent, name, type, cbData, pbData);
-    }
+private:
+
+    void CreateRoot() noexcept(false);
 
     /*
-    Creates a new value. Inserts it as the first child of itParent.
-    If pbData is null, the new value's payload is uninitialized.
-    Requires: itParent must reference an array or an object value.
-    Requires: if type is Array or Object, cbValue must be 0 and pbValue must be
-    null. Returns: an iterator that references the new value. O(1).
+    Common implementation for NewValueInit.
+    If reallocation occurred and pName pointed into old storage, returns corresponding
+    pointer into new storage. Otherwise returns pName.
     */
-    iterator push_back(
-        const_iterator const& itParent,
-        std::string_view const& name,
-        JsonType type,
-        unsigned cbData = 0,
-        _In_reads_bytes_(cbData) void const* pbData = nullptr)
-        noexcept(false) // may throw bad_alloc, length_error
-    {
-        return AddValue(false, itParent, name, type, cbData, pbData);
-    }
-
-    /*
-    Creates a new value. Inserts it as the first (if front is true) or last
-    (if front is false) child of itParent.
-
-    Data must be a supported type. Supported types include:
-
-    - For boolean data: bool.
-    - For UTF-8 string data: std::string_view, char*.
-    - For integer data: signed and unsigned char, short, int, long, long long.
-    - For float data: float, double.
-    - For time data: TimeStruct, std::chrono::system_clock::time_point.
-    - For UUID data: UuidStruct.
-    - Any user-defined type for which JsonImplementType<T>::AddValue exists.
-
-    We specifically do not support char because the intent is ambiguous.
-
-    - Convert a char to __wchar_t, signed char, or unsigned char, as
-    appropriate.
-    - Convert a char* to wchar_t* (or use JsonPushBackMbcs).
-
-    Requires: itParent must reference an array or an object value.
-    Returns: an iterator that references the new value.
-    O(1).
-    */
-    template<
-        class T,
-        class EnableIfType =
-            decltype(JsonImplementType<typename std::decay<T>::type>::AddValue)>
-    iterator AddValue(
+    void const* NewValueInitImpl(
         bool front,
         const_iterator const& itParent,
-        std::string_view const& name,
-        T const& data)
-        noexcept(false) // may throw bad_alloc, length_error
-    {
-        return JsonImplementType<typename std::decay<T>::type>::AddValue(
-            *this, front, itParent, name, data);
-    }
+        void const* pchName,
+        unsigned cbNameReserve,
+        unsigned cbDataHint)
+        noexcept(false);  // may throw bad_alloc, length_error
 
-    /*
-    Creates a new value. Inserts it as the first child of itParent.
-
-    Data must be a supported type. Supported types include:
-
-    - For boolean data: bool.
-    - For UTF-8 string data: std::string_view, char*.
-    - For integer data: signed and unsigned char, short, int, long, long long.
-    - For float data: float, double.
-    - For time data: TimeStruct, std::chrono::system_clock::time_point.
-    - For UUID data: UuidStruct.
-    - Any user-defined type for which JsonImplementType<T>::AddValue exists.
-
-    We specifically do not support char because the intent is ambiguous.
-
-    - Convert a char to __wchar_t, signed char, or unsigned char, as
-    appropriate.
-    - Convert a char* to wchar_t* (or use JsonPushBackMbcs).
-
-    Requires: itParent must reference an array or an object value.
-    Returns: an iterator that references the new value.
-    O(1).
-    */
-    template<
-        class T,
-        class EnableIfType =
-            decltype(JsonImplementType<typename std::decay<T>::type>::AddValue)>
-    iterator push_front(
+    void NewValueInit(
+        bool front,
         const_iterator const& itParent,
-        std::string_view const& name,
-        T const& data)
-        noexcept(false) // may throw bad_alloc, length_error
-    {
-        return JsonImplementType<typename std::decay<T>::type>::AddValue(
-            *this, true, itParent, name, data);
-    }
-
-    /*
-    Creates a new value. Inserts it as the last child of itParent.
-
-    Data must be a supported type. Supported types include:
-
-    - For boolean data: bool.
-    - For UTF-8 string data: std::string_view, char*.
-    - For integer data: signed and unsigned char, short, int, long, long long.
-    - For float data: float, double.
-    - For time data: TimeStruct, std::chrono::system_clock::time_point.
-    - For UUID data: UuidStruct.
-    - Any user-defined type for which JsonImplementType<T>::AddValue exists.
-
-    We specifically do not support char because the intent is ambiguous.
-
-    - Convert a char to __wchar_t, signed char, or unsigned char, as
-    appropriate.
-    - Convert a char* to wchar_t* (or use JsonPushBackMbcs).
-
-    Requires: itParent must reference an array or an object value.
-    Returns: an iterator that references the new value.
-    O(1).
-    */
-    template<
-        class T,
-        class EnableIfType =
-            decltype(JsonImplementType<typename std::decay<T>::type>::AddValue)>
-    iterator push_back(
+        _In_reads_(cchName) char const* pchNameUtf8,
+        size_type cchName,
+        unsigned cbDataHint)
+        noexcept(false);  // may throw bad_alloc, length_error
+    void NewValueInit(
+        bool front,
         const_iterator const& itParent,
-        std::string_view const& name,
+        _In_reads_(cchName) char16_t const* pchNameUtf16,
+        size_type cchName,
+        unsigned cbDataHint)
+        noexcept(false);  // may throw bad_alloc, length_error
+    void NewValueInit(
+        bool front,
+        const_iterator const& itParent,
+        _In_reads_(cchName) char32_t const* pchNameUtf32,
+        size_type cchName,
+        unsigned cbDataHint)
+        noexcept(false);  // may throw bad_alloc, length_error
+
+    template<class NameStringView>
+    iterator AddValueImpl(
+        bool front,
+        const_iterator const& itParent,
+        NameStringView nameView,
+        JsonType type,
+        unsigned cbData = 0,
+        _In_reads_bytes_(cbData) void const* pbData = nullptr)
+        noexcept(false)  // may throw bad_alloc, length_error
+    {
+        using char_type = typename JsonInternal::CharTypeOk<typename NameStringView::value_type>::char_type;
+        NewValueInit(
+            front,
+            itParent,
+            reinterpret_cast<char_type const*>(nameView.data()),
+            nameView.size(),
+            cbData);
+        return _newValueCommit(type, cbData, pbData);
+    }
+
+    template<class T, class NameStringView>
+    iterator AddValueImpl(
+        bool front,
+        const_iterator const& itParent,
+        NameStringView nameView,
         T const& data)
         noexcept(false) // may throw bad_alloc, length_error
     {
-        return JsonImplementType<typename std::decay<T>::type>::AddValue(
-            *this, false, itParent, name, data);
+        using char_type = typename JsonInternal::CharTypeOk<typename NameStringView::value_type>::char_type;
+        NewValueInit(
+            front,
+            itParent,
+            reinterpret_cast<char_type const*>(nameView.data()),
+            nameView.size(),
+            8u); // Preallocate space for the data. No real problem if it's too small.
+        return JsonImplementType<typename std::decay<T>::type>::AddValueCommit(*this, data);
     }
 
-  private:
     static void AssertNotEnd(Index) noexcept;
     static void AssertHidden(JsonType) noexcept;
     void ValidateIterator(const_iterator const&) const noexcept;
@@ -1439,19 +1589,6 @@ class JsonBuilder
 
     unsigned
     FindImpl(Index parentIndex, std::string_view const& name) const noexcept;
-
-    /*
-    Adds an unlinked node to the storage vector. The caller must add the new
-    node to the list. Returns the index of the new value.
-    It is always ok for pbValue to be null. If so, the data will be
-    uninitialized. If type is JsonArray or JsonObject, cbData must be 0.
-    */
-    Index CreateValue(
-        std::string_view const& name,
-        JsonType type,
-        unsigned cbData,
-        _In_reads_bytes_(cbData) void const* pbData)
-        noexcept(false);  // may throw bad_alloc, length_error
 
     unsigned Find(Index parentIndex) const noexcept { return parentIndex; }
 
@@ -1633,87 +1770,80 @@ class JsonImplementType
     Specializations of JsonImplementType<T> may implement any or all of the
     following:
 
+    // Should assert that value type and size are appropriate for T.
     static T // return value may be "T" or "const T&" at your discretion.
     GetUnchecked(JsonValue const& value);
 
+    // If value type is appropriate for T, set result = converted value and
+    // returns true. Otherwise, returns false.
     static bool
     ConvertTo(JsonValue const& value, T& result);
 
+    // Should call builder._newValueCommit to commit a new value.
     static JsonIterator
-    AddValue(
+    AddValueCommit(
         JsonBuilder& builder,
-        bool front,
-        JsonConstIterator const& itParent,
-        std::string_view const& name,
         T data); // data parameter may be "T" or "const T&" at your discretion.
 
     The specialization may leave the method undefined if the given operation
     should not be supported. If the specialization does provide an
     implementation for a method, it should conform to the semantics of the
     corresponding methods of the JsonValue or JsonBuilder class.
+
+    Important: The pointer passed to _newValueCommit must not be
+    heap-allocated within the call to AddValueCommit. A heap-allocated
+    pointer might be incorrectly detected as a pointer to an existing
+    value and trigger special handling during reallocation. If you need
+    to allocate a buffer, pass NULL to _newValueCommit and copy the data
+    into the new value after _newValueCommit returns.
     */
 };
 
-#define JSON_DECLARE_JsonImplementType(T, getRef)                         \
+#define JSON_DECLARE_JsonImplementType(T, InRef, ReturnRef)               \
     template<>                                                            \
     class JsonImplementType<T>                                            \
     {                                                                     \
-      public:                                                             \
-        static T getRef GetUnchecked(JsonValue const& value) noexcept;    \
+    public:                                                               \
+        static T ReturnRef GetUnchecked(JsonValue const& value) noexcept; \
         static bool ConvertTo(JsonValue const& value, T& result) noexcept;\
-        static JsonIterator AddValue(                                     \
-            JsonBuilder& builder,                                         \
-            bool front,                                                   \
-            JsonConstIterator const& itParent,                            \
-            std::string_view const& name,                                 \
-            T const& data);                                               \
+        static JsonIterator AddValueCommit(JsonBuilder& builder, T InRef data); \
     }
 
-#define JSON_DECLARE_JsonImplementType_AddValue(T) \
+#define JSON_DECLARE_JsonImplementType_AddValue(T, InRef) \
     template<>                                     \
     class JsonImplementType<T>                     \
     {                                              \
-      public:                                      \
-        static JsonIterator AddValue(              \
-            JsonBuilder& builder,                  \
-            bool front,                            \
-            JsonConstIterator const& itParent,     \
-            std::string_view const& name,          \
-            T const& data);                        \
+    public:                                        \
+        static JsonIterator AddValueCommit(JsonBuilder& builder, T InRef data); \
     }
 
-JSON_DECLARE_JsonImplementType(bool, );
+JSON_DECLARE_JsonImplementType(bool,, );
 
-JSON_DECLARE_JsonImplementType(unsigned char, );
-JSON_DECLARE_JsonImplementType(unsigned short, );
-JSON_DECLARE_JsonImplementType(unsigned int, );
-JSON_DECLARE_JsonImplementType(unsigned long, );
-JSON_DECLARE_JsonImplementType(unsigned long long, );
+JSON_DECLARE_JsonImplementType(unsigned char,, );
+JSON_DECLARE_JsonImplementType(unsigned short,, );
+JSON_DECLARE_JsonImplementType(unsigned int,, );
+JSON_DECLARE_JsonImplementType(unsigned long,, );
+JSON_DECLARE_JsonImplementType(unsigned long long,, );
 
-JSON_DECLARE_JsonImplementType(signed char, );
-JSON_DECLARE_JsonImplementType(signed short, );
-JSON_DECLARE_JsonImplementType(signed int, );
-JSON_DECLARE_JsonImplementType(signed long, );
-JSON_DECLARE_JsonImplementType(signed long long, );
+JSON_DECLARE_JsonImplementType(signed char,, );
+JSON_DECLARE_JsonImplementType(signed short,, );
+JSON_DECLARE_JsonImplementType(signed int,, );
+JSON_DECLARE_JsonImplementType(signed long,, );
+JSON_DECLARE_JsonImplementType(signed long long,, );
 
-JSON_DECLARE_JsonImplementType(float, );
-JSON_DECLARE_JsonImplementType(double, );
+JSON_DECLARE_JsonImplementType(float,, );
+JSON_DECLARE_JsonImplementType(double,, );
 
-JSON_DECLARE_JsonImplementType(TimeStruct, );
-JSON_DECLARE_JsonImplementType(std::chrono::system_clock::time_point, );
-JSON_DECLARE_JsonImplementType(UuidStruct, const&);
-JSON_DECLARE_JsonImplementType(std::string_view, );
+JSON_DECLARE_JsonImplementType(TimeStruct,, );
+JSON_DECLARE_JsonImplementType(std::chrono::system_clock::time_point,, );
+JSON_DECLARE_JsonImplementType(UuidStruct, const&, const&);
+JSON_DECLARE_JsonImplementType(std::string_view,, );
 
 template<>
 class JsonImplementType<char*>
 {
-  public:
-    static JsonIterator AddValue(
-        JsonBuilder& builder,
-        bool front,
-        JsonConstIterator const& itParent,
-        std::string_view const& name,
-        _In_z_ char const* psz);
+public:
+    static JsonIterator AddValueCommit(JsonBuilder& builder, _In_z_ char const* psz);
 };
 
 template<>

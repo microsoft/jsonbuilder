@@ -6,24 +6,114 @@
 #include <cassert>
 #include <cstring>
 
+#ifndef _Out_writes_to_
+#define _Out_writes_to_(count, written)
+#endif
+
 #define StorageSize sizeof(JsonValue::StoragePod)
-#define DataMax 0xf0000000
 
 /*
 Computes the difference between a value's index and the index at which its
 data begins. Used to determine the DataIndex for a value:
 value.DataIndex = value.Index + DATA_OFFSET(value.cchName).
 */
-#define DATA_OFFSET(cchName) \
-    (((cchName) + sizeof(JsonValue) + (StorageSize - 1)) / StorageSize)
+#define DATA_OFFSET(cchName) ( \
+    ((cchName) + static_cast<unsigned>(sizeof(JsonValue) + (StorageSize - 1))) \
+    / static_cast<unsigned>(StorageSize) \
+    )
 
 #define IS_SPECIAL_TYPE(type) (JsonHidden <= (type))
 #define IS_NORMAL_TYPE(type) ((type) < JsonHidden)
 #define IS_COMPOSITE_TYPE(type) (JsonArray <= (type))
 
+auto constexpr NameMax = 0xFFFFFFu;
+auto constexpr DataMax = 0xF0000000u;
+
 auto constexpr TicksPerSecond = 10'000'000u;
 auto constexpr FileTime1970Ticks = 116444736000000000u;
 using ticks = std::chrono::duration<std::int64_t, std::ratio<1, TicksPerSecond>>;
+
+static unsigned
+Utf16ToUtf8(
+    _Out_writes_to_(cchSrc * 3, return) char unsigned* pchDest,
+    _In_reads_(cchSrc) char16_t const* pchSrc,
+    unsigned cchSrc)
+    noexcept
+{
+    unsigned iDest = 0;
+    for (unsigned iSrc = 0; iSrc != cchSrc; iSrc += 1)
+    {
+        auto const ch = pchSrc[iSrc];
+        if (ch < 0x80)
+        {
+            pchDest[iDest++] = static_cast<char unsigned>(ch);
+        }
+        else if (ch < 0x800)
+        {
+            pchDest[iDest++] = static_cast<char unsigned>(0xC0 | (ch >> 6));
+            pchDest[iDest++] = static_cast<char unsigned>(0x80 | (ch & 0x3F));
+        }
+        else if (ch >= 0xD800 && ch < 0xDC00 &&
+            iSrc + 1 != cchSrc &&
+            pchSrc[iSrc + 1] >= 0xDC00 && pchSrc[iSrc + 1] < 0xE000)
+        {
+            // Surrogate pair.
+            iSrc += 1;
+            auto const ch32 = ((ch - 0xD800) << 10) + (pchSrc[iSrc] - 0xDC00) + 0x10000;
+            pchDest[iDest++] = static_cast<char unsigned>(0xF0 | (ch32 >> 18));
+            pchDest[iDest++] = static_cast<char unsigned>(0x80 | ((ch32 >> 12) & 0x3F));
+            pchDest[iDest++] = static_cast<char unsigned>(0x80 | ((ch32 >> 6) & 0x3F));
+            pchDest[iDest++] = static_cast<char unsigned>(0x80 | (ch32 & 0x3F));
+        }
+        else
+        {
+            pchDest[iDest++] = static_cast<char unsigned>(0xE0 | (ch >> 12));
+            pchDest[iDest++] = static_cast<char unsigned>(0x80 | ((ch >> 6) & 0x3F));
+            pchDest[iDest++] = static_cast<char unsigned>(0x80 | (ch & 0x3F));
+        }
+    }
+
+    return iDest;
+}
+
+static unsigned
+Utf32ToUtf8(
+    _Out_writes_to_(cchSrc * 4, return) char unsigned* pchDest,
+    _In_reads_(cchSrc) char32_t const* pchSrc,
+    unsigned cchSrc)
+    noexcept
+{
+    unsigned iDest = 0;
+    for (unsigned iSrc = 0; iSrc != cchSrc; iSrc += 1)
+    {
+        auto const ch = pchSrc[iSrc];
+        if (ch < 0x80)
+        {
+            pchDest[iDest++] = static_cast<char unsigned>(ch);
+        }
+        else if (ch < 0x800)
+        {
+            pchDest[iDest++] = static_cast<char unsigned>(0xC0 | (ch >> 6));
+            pchDest[iDest++] = static_cast<char unsigned>(0x80 | (ch & 0x3F));
+        }
+        else if (ch < 0x10000)
+        {
+            pchDest[iDest++] = static_cast<char unsigned>(0xE0 | (ch >> 12));
+            pchDest[iDest++] = static_cast<char unsigned>(0x80 | ((ch >> 6) & 0x3F));
+            pchDest[iDest++] = static_cast<char unsigned>(0x80 | (ch & 0x3F));
+        }
+        else
+        {
+            // If ch is outside the Unicode range, we'll ignore the high bits.
+            pchDest[iDest++] = static_cast<char unsigned>(0xF0 | (ch >> 18));
+            pchDest[iDest++] = static_cast<char unsigned>(0x80 | ((ch >> 12) & 0x3F));
+            pchDest[iDest++] = static_cast<char unsigned>(0x80 | ((ch >> 6) & 0x3F));
+            pchDest[iDest++] = static_cast<char unsigned>(0x80 | (ch & 0x3F));
+        }
+    }
+
+    return iDest;
+}
 
 // JsonValue
 
@@ -202,12 +292,77 @@ JsonIterator JsonIterator::end() const noexcept
     return JsonIterator(JsonConstIterator::end());
 }
 
+// JsonBuilder::RestoreOldSize
+
+class JsonBuilder::RestoreOldSize
+{
+    StorageVec::size_type const m_oldSize;
+    StorageVec* m_pVec;
+
+public:
+
+    ~RestoreOldSize()
+    {
+        if (m_pVec != nullptr)
+        {
+            m_pVec->resize(m_oldSize);
+        }
+    }
+
+    explicit
+    RestoreOldSize(StorageVec& vec) noexcept : m_oldSize(vec.size()), m_pVec(&vec)
+    {
+        return;
+    }
+
+    void
+    Dismiss() noexcept
+    {
+        m_pVec = nullptr;
+    }
+};
+
 // JsonBuilder::Validator
 
 constexpr unsigned char MapBits = 2;
 constexpr unsigned char MapMask = (1 << MapBits) - 1;
 constexpr unsigned char MapPerByte = 8 / MapBits;
 #define MapSize(cStorage) ((cStorage) / MapPerByte + 1u)
+
+class JsonBuilder::Validator
+    : private JsonInternal::PodVectorBase
+{
+    // 2-bit value.
+    enum ValidationState : char unsigned
+    {
+        ValNone = 0,
+        ValTail = 1,
+        ValHead = 2,
+        ValReached = 3,
+        ValMax
+    };
+
+    JsonValue::StoragePod const* const m_pStorage;
+    size_type const m_size;
+    char unsigned* const m_pMap;  // 2 bits per StoragePod in m_pStorage.
+
+    public:
+    ~Validator();
+
+    explicit Validator(
+        _In_reads_(cStorage) JsonValue::StoragePod const* pStorage,
+        size_type cStorage)
+        noexcept(false);  // may throw bad_alloc
+
+    void Validate()
+        noexcept(false);  // may throw invalid_argument
+
+    private:
+    void ValidateRecurse(Index index) noexcept(false);
+
+    void
+    UpdateMap(Index index, ValidationState expectedVal, ValidationState newVal) noexcept(false);
+};
 
 JsonBuilder::Validator::~Validator()
 {
@@ -674,28 +829,330 @@ JsonBuilder::cend(const_iterator const& itParent) const noexcept
     return const_iterator(this, index);
 }
 
-JsonBuilder::iterator JsonBuilder::AddValue(
+void
+JsonBuilder::CreateRoot() noexcept(false)
+{
+    unsigned constexpr RootIndex = 0u;
+    unsigned constexpr SentinelIndex = RootIndex + DATA_OFFSET(0u);
+    m_storage.resize(RootSize);
+    auto const pStorage = m_storage.data();
+
+    auto const pRootValue = reinterpret_cast<JsonValue*>(pStorage + RootIndex);
+    pRootValue->m_nextIndex = SentinelIndex;
+    pRootValue->m_cchName = 0u;
+    pRootValue->m_type = JsonObject;
+    pRootValue->m_lastChildIndex = SentinelIndex;
+
+    auto const pSentinel = reinterpret_cast<JsonValueBase*>(pStorage + SentinelIndex);
+    pSentinel->m_nextIndex = RootIndex;
+    pSentinel->m_cchName = 0;
+    pSentinel->m_type = JsonHidden;
+}
+
+void const*
+JsonBuilder::NewValueInitImpl(
     bool front,
     const_iterator const& itParent,
-    std::string_view const& name,
-    JsonType type,
-    unsigned cbData,
-    _In_reads_bytes_(cbData) void const* pbData)
+    void const* pName,
+    unsigned cbNameReserve,
+    unsigned cbDataHint)
+    noexcept(false)  // may throw bad_alloc, length_error
 {
     ValidateIterator(itParent);
-    EnsureRootExists();
-    ValidateParentIterator(itParent.m_index);
-    Index const newIndex = CreateValue(name, type, cbData, pbData);
+
+    if (cbDataHint < sizeof(void*) || cbDataHint > DataMax)
+    {
+        if (cbDataHint > DataMax)
+        {
+            JsonThrowLengthError("JsonBuilder - cbData too large");
+        }
+
+        // We need at least enough room for a pointer.
+        cbDataHint = sizeof(void*);
+    }
+
+    unsigned const valueIndex = static_cast<unsigned>(m_storage.size());
+    unsigned const dataIndex = valueIndex + DATA_OFFSET(cbNameReserve);
+    unsigned const newStorageSize = dataIndex + (cbDataHint + StorageSize - 1) / StorageSize;
+
+    if (dataIndex <= valueIndex || newStorageSize < dataIndex)
+    {
+        // Integer overflow.
+        JsonThrowLengthError("JsonBuilder - too much data");
+    }
+
+    void const* pNameAfterAlloc;
+    if (m_storage.empty())
+    {
+        // Validate itParent.
+        // Since builder is empty, the only possible parent is the root.
+        if (itParent.m_index != 0)
+        {
+            assert(!"JsonBuilder: destination must be an array or object");
+            std::terminate();
+        }
+
+        if (newStorageSize + RootSize < RootSize)
+        {
+            // Integer overflow.
+            JsonThrowLengthError("JsonBuilder - too much data");
+        }
+
+        // Reserve room for root and new value (avoid extra reallocation).
+        m_storage.reserve(newStorageSize + RootSize); // Reserve, not Resize.
+        CreateRoot();
+
+        // Since builder was empty, it's not possible for pName to be inside storage.
+        pNameAfterAlloc = pName;
+    }
+    else
+    {
+        // Validate itParent.
+        ValidateParentIterator(itParent.m_index);
+
+        // Reserve room for new value.
+        if (m_storage.capacity() >= newStorageSize)
+        {
+            // No reallocation, so pName is still valid.
+            pNameAfterAlloc = pName;
+        }
+        else
+        {
+            auto const oldDataBegin = reinterpret_cast<char*>(m_storage.data());
+            auto const oldDataEnd = reinterpret_cast<char*>(m_storage.data() + m_storage.size());
+            m_storage.reserve(newStorageSize); // Reserve, not Resize.
+
+            if (static_cast<char const*>(pName) > oldDataBegin &&
+                static_cast<char const*>(pName) < oldDataEnd)
+            {
+                // They're copying the name from within the vector, and we just resized
+                // out from under them. Technically, we could consider this a bug in the
+                // caller, but it's an easy mistake to make, easy to miss in testing,
+                // and hard to diagnose if it hits. Dealing with this is easy for us, so
+                // just fix up the problem instead of making it an error.
+                pNameAfterAlloc = reinterpret_cast<char*>(m_storage.data()) +
+                    (static_cast<char const*>(pName) - oldDataBegin);
+            }
+            else
+            {
+                pNameAfterAlloc = pName;
+            }
+        }
+    }
+
+    auto const pValue = reinterpret_cast<JsonValue*>(m_storage.data() + m_storage.size());
+    pValue->m_nextIndex = itParent.m_index; // Stash itParent for use by _newValueCommit.
+    pValue->m_type = static_cast<JsonType>(front); // Stash front for use by _newValueCommit.
+
+    return pNameAfterAlloc;
+}
+
+void
+JsonBuilder::NewValueInit(
+    bool front,
+    const_iterator const& itParent,
+    _In_reads_(cchName) char const* pchNameUtf8,
+    size_type cchName,
+    unsigned cbDataHint)
+    noexcept(false)  // may throw bad_alloc, length_error
+{
+    auto constexpr WorstCaseMultiplier = 1u;
+    if (cchName > NameMax / WorstCaseMultiplier)
+    {
+        JsonThrowLengthError("JsonBuilder - cchName too large");
+    }
+
+    auto const cchSrc = static_cast<unsigned>(cchName);
+    auto const cbNameReserve = cchSrc * WorstCaseMultiplier;
+    auto const pOldStorageData = m_storage.data();
+    auto const pchSrc = static_cast<char const*>(
+        NewValueInitImpl(front, itParent, pchNameUtf8, cbNameReserve, cbDataHint));
+    auto const pValue = reinterpret_cast<JsonValue*>(m_storage.data() + m_storage.size());
+    auto const pchDest = reinterpret_cast<char unsigned*>(pValue + 1);
+
+    // Stash the name for use by _newValueCommit.
+    auto const cchDest = cchSrc;
+    memcpy(pchDest, pchSrc, cchSrc); // No conversion needed.
+    pValue->m_cchName = cchDest;
+    
+    // Stash the old pointer for use by _newValueCommit.
+    memcpy(reinterpret_cast<StoragePod*>(pValue) + DATA_OFFSET(cchDest),
+        &pOldStorageData, sizeof(pOldStorageData));
+}
+
+void
+JsonBuilder::NewValueInit(
+    bool front,
+    const_iterator const& itParent,
+    _In_reads_(cchName) char16_t const* pchNameUtf16,
+    size_type cchName,
+    unsigned cbDataHint)
+    noexcept(false)  // may throw bad_alloc, length_error
+{
+    auto constexpr WorstCaseMultiplier = 3u; // 1 UTF-16 code unit -> 3 UTF-8 code units.
+    if (cchName > NameMax / WorstCaseMultiplier)
+    {
+        JsonThrowLengthError("JsonBuilder - cchName too large");
+    }
+
+    auto const cchSrc = static_cast<unsigned>(cchName);
+    auto const cbNameReserve = cchSrc * WorstCaseMultiplier;
+    auto const pOldStorageData = m_storage.data();
+    auto const pchSrc = static_cast<char16_t const*>(
+        NewValueInitImpl(front, itParent, pchNameUtf16, cbNameReserve, cbDataHint));
+    auto const pValue = reinterpret_cast<JsonValue*>(m_storage.data() + m_storage.size());
+    auto const pchDest = reinterpret_cast<char unsigned*>(pValue + 1);
+
+    // Stash the name for use by _newValueCommit.
+    auto const cchDest = Utf16ToUtf8(pchDest, pchSrc, cchSrc);
+    pValue->m_cchName = cchDest;
+
+    // Stash the old pointer for use by _newValueCommit.
+    memcpy(reinterpret_cast<StoragePod*>(pValue) + DATA_OFFSET(cchDest),
+        &pOldStorageData, sizeof(pOldStorageData));
+}
+
+void
+JsonBuilder::NewValueInit(
+    bool front,
+    const_iterator const& itParent,
+    _In_reads_(cchName) char32_t const* pchNameUtf32,
+    size_type cchName,
+    unsigned cbDataHint)
+    noexcept(false)  // may throw bad_alloc, length_error
+{
+    auto constexpr WorstCaseMultiplier = 4u; // 1 UTF-32 code unit -> 4 UTF-8 code units.
+    if (cchName > NameMax / WorstCaseMultiplier)
+    {
+        JsonThrowLengthError("JsonBuilder - cchName too large");
+    }
+
+    auto const cchSrc = static_cast<unsigned>(cchName);
+    auto const cbNameReserve = cchSrc * WorstCaseMultiplier;
+    auto const pOldStorageData = m_storage.data();
+    auto const pchSrc = static_cast<char32_t const*>(
+        NewValueInitImpl(front, itParent, pchNameUtf32, cbNameReserve, cbDataHint));
+    auto const pValue = reinterpret_cast<JsonValue*>(m_storage.data() + m_storage.size());
+    auto const pchDest = reinterpret_cast<char unsigned*>(pValue + 1);
+
+    // Stash the name for use by _newValueCommit.
+    auto const cchDest = Utf32ToUtf8(pchDest, pchSrc, cchSrc);
+    pValue->m_cchName = cchDest;
+
+    // Stash the old pointer for use by _newValueCommit.
+    memcpy(reinterpret_cast<StoragePod*>(pValue) + DATA_OFFSET(cchDest),
+        &pOldStorageData,
+        sizeof(pOldStorageData));
+}
+
+JsonBuilder::iterator
+JsonBuilder::_newValueCommit(
+    JsonType type,
+    unsigned cbData,
+    _In_reads_bytes_opt_(cbData) void const* pbData)
+    noexcept(false)  // may throw bad_alloc, length_error
+{
+    if (cbData > DataMax)
+    {
+        JsonThrowLengthError("JsonBuilder - cbValue too large");
+    }
+
+    auto const newIndex = static_cast<unsigned>(m_storage.size());
+
+    // We expect front, parentIndex, name, and pOldStorageData to have been
+    // stashed by NewValueInit.
+
+    auto pValue = reinterpret_cast<JsonValue*>(m_storage.data() + newIndex);
+    assert(m_storage.capacity() - m_storage.size() >= sizeof(JsonValue) / StorageSize);
+
+    auto const dataIndex = newIndex + DATA_OFFSET(pValue->m_cchName);
+    assert(m_storage.capacity() >= dataIndex + (sizeof(void*) + StorageSize - 1) / StorageSize);
+
+    auto const parentIndex = pValue->m_nextIndex;
+    assert(parentIndex < newIndex);
+    assert(IS_COMPOSITE_TYPE(GetValue(parentIndex).m_type));
+
+    auto const front = pValue->m_type != 0;
+    assert(pValue->m_type == 0 || pValue->m_type == 1);
+
+    StoragePod const* pOldStorageData;
+    memcpy(&pOldStorageData, m_storage.data() + dataIndex, sizeof(pOldStorageData));
+
+    if (IS_COMPOSITE_TYPE(type))
+    {
+        assert(cbData == 0);
+        cbData = sizeof(JsonValueBase);
+    }
+
+    unsigned const newStorageSize = dataIndex + (cbData + StorageSize - 1) / StorageSize;
+    if (newStorageSize < dataIndex)
+    {
+        JsonThrowLengthError("JsonBuilder - too much data");
+    }
+
+    if (m_storage.capacity() < newStorageSize)
+    {
+        RestoreOldSize restoreOldSize(m_storage); // In case resize(newStorageSize) throws.
+        m_storage.resize(dataIndex); // Does not reallocate. Ensures that name gets copied during reallocation.
+        m_storage.resize(newStorageSize); // Reallocate.
+
+        // Commit.
+        restoreOldSize.Dismiss();
+        pValue = reinterpret_cast<JsonValue*>(m_storage.data() + newIndex);
+    }
+    else
+    {
+        // Commit.
+        m_storage.resize(newStorageSize);
+    }
+
+    pValue->m_nextIndex = 0;
+    pValue->m_type = type;
+
+    if (IS_COMPOSITE_TYPE(type))
+    {
+        pValue->m_lastChildIndex = dataIndex;
+
+        // Set up sentinel node. Insert it into the linked list.
+        auto pRootValue = reinterpret_cast<JsonValue*>(m_storage.data());
+        auto pSentinel = reinterpret_cast<JsonValueBase*>(m_storage.data() + dataIndex);
+        pSentinel->m_nextIndex = pRootValue->m_nextIndex;
+        pSentinel->m_cchName = 0;
+        pSentinel->m_type = JsonHidden;
+        pRootValue->m_nextIndex = dataIndex;
+    }
+    else
+    {
+        pValue->m_cbData = cbData;
+
+        if (pbData != nullptr)
+        {
+            if (pOldStorageData != m_storage.data() && // We reallocated.
+                pOldStorageData != nullptr &&          // Wasn't empty.
+                pbData > static_cast<void const*>(pOldStorageData) &&
+                pbData < static_cast<void const*>(pOldStorageData + newIndex))
+            {
+                // They're copying the data from within the vector, and we just resized
+                // out from under them. Technically, we could consider this a bug in the
+                // caller, but it's an easy mistake to make, easy to miss in testing,
+                // and hard to diagnose if it hits. Dealing with this is easy for us, so
+                // just fix up the problem instead of making it an error.
+                pbData = reinterpret_cast<char const*>(m_storage.data()) +
+                    (static_cast<char const*>(pbData) - reinterpret_cast<char const*>(pOldStorageData));
+            }
+
+            memcpy(m_storage.data() + dataIndex, pbData, cbData);
+        }
+    }
 
     // Find the right place in the linked list for the new node.
     // Update the parent's lastChildIndex if necessary.
 
-    auto& parentValue = GetValue(itParent.m_index);  // GetValue(parent) must be
-                                                     // AFTER the CreateValue.
+    auto& parentValue = GetValue(parentIndex);
     Index prevIndex;  // The node that the new node goes after.
     if (front)
     {
-        prevIndex = FirstChild(itParent.m_index);
+        prevIndex = FirstChild(parentIndex);
         if (prevIndex == parentValue.m_lastChildIndex)
         {
             parentValue.m_lastChildIndex = newIndex;
@@ -798,111 +1255,8 @@ void JsonBuilder::EnsureRootExists()
 {
     if (m_storage.empty())
     {
-        unsigned index =
-            CreateValue(std::string_view(), JsonObject, 0, nullptr);
-        if (index != 0)
-        {
-            std::terminate();
-        }
+        CreateRoot();
     }
-}
-
-JsonBuilder::Index JsonBuilder::CreateValue(
-    std::string_view const& name,
-    JsonType type,
-    unsigned cbData,
-    _In_reads_bytes_(cbData) void const* pbData)
-{
-    if (name.size() > 0xffffff)
-    {
-        JsonThrowLengthError("JsonBuilder - cchName too large");
-    }
-
-    if (cbData > DataMax)
-    {
-        JsonThrowLengthError("JsonBuilder - cbValue too large");
-    }
-
-    if (IS_COMPOSITE_TYPE(type))
-    {
-        assert(cbData == 0);
-        cbData = sizeof(JsonValueBase);
-    }
-
-    unsigned const cchName = static_cast<unsigned>(name.size());
-    unsigned const valueIndex = static_cast<unsigned>(m_storage.size());
-    unsigned const dataIndex = valueIndex + DATA_OFFSET(cchName);
-    unsigned const newStorageSize =
-        dataIndex + (cbData + StorageSize - 1) / StorageSize;
-    auto const pOldStorageData = reinterpret_cast<char const*>(m_storage.data());
-
-    if (newStorageSize <= valueIndex)
-    {
-        JsonThrowLengthError("JsonBuilder - too much data");
-    }
-
-    m_storage.resize(newStorageSize);
-
-    JsonValue* const pValue =
-        reinterpret_cast<JsonValue*>(m_storage.data() + valueIndex);
-    pValue->m_nextIndex = 0;
-    pValue->m_cchName = cchName;
-    pValue->m_type = type;
-
-    auto pNameData = reinterpret_cast<char const*>(name.data());
-    auto const pNewStorageData = reinterpret_cast<char const*>(m_storage.data());
-    if (pOldStorageData != pNewStorageData && pOldStorageData < pNameData &&
-        pNameData < pOldStorageData + (valueIndex * StorageSize))
-    {
-        // They're copying the name from within the vector, and we just resized
-        // out from under them. Technically, we could consider this a bug in the
-        // caller, but it's an easy mistake to make, easy to miss in testing,
-        // and hard to diagnose if it hits. Dealing with this is easy for us, so
-        // just fix up the problem instead of making it an error.
-        pNameData = pNewStorageData + (pNameData - pOldStorageData);
-    }
-
-    // Write into the memory beyond the JsonValue's end
-    std::memcpy(reinterpret_cast<char*>(pValue + 1), pNameData, cchName);
-
-    if (IS_COMPOSITE_TYPE(type))
-    {
-        pValue->m_lastChildIndex = dataIndex;
-
-        // Set up sentinel node. Insert it into the linked list.
-        auto pRootValue = reinterpret_cast<JsonValue*>(m_storage.data());
-        auto pSentinel =
-            reinterpret_cast<JsonValueBase*>(m_storage.data() + dataIndex);
-        pSentinel->m_nextIndex = pRootValue->m_nextIndex;
-        pSentinel->m_cchName = 0;
-        pSentinel->m_type = JsonHidden;
-        pRootValue->m_nextIndex = dataIndex;
-    }
-    else
-    {
-        pValue->m_cbData = cbData;
-
-        // Set up data.
-        if (pbData != nullptr)
-        {
-            auto pData = static_cast<char const*>(pbData);
-            if (pOldStorageData != pNewStorageData && pOldStorageData < pData &&
-                pData < pOldStorageData + (valueIndex * StorageSize))
-            {
-                // They're copying the data from within the vector, and we just
-                // resized out from under them. Technically, we could consider
-                // this a bug in the caller, but it's an easy mistake to make,
-                // easy to miss in testing, and hard to diagnose when it hits.
-                // Dealing with this is easy for us, so just fix up the problem
-                // instead of making it an error.
-                pData = pNewStorageData + (pData - pOldStorageData);
-            }
-
-            memcpy(m_storage.data() + dataIndex, pData, cbData);
-        }
-    }
-
-    return valueIndex;
 }
 
 void swap(JsonBuilder& a, JsonBuilder& b) noexcept
@@ -917,16 +1271,12 @@ The macro-based GetUnchecked and ConvertTo (for f32, u8, u16, u32, i8, i16,
 and i32) aren't perfectly optimal... But they're probably close enough.
 */
 
-#define IMPLEMENT_AddValue(DataType, DataSize, DataPtr, ValueType) \
-    JsonIterator JsonImplementType<DataType>::AddValue(            \
+#define IMPLEMENT_AddValue(DataType, DataSize, DataPtr, ValueType, InRef) \
+    JsonIterator JsonImplementType<DataType>::AddValueCommit(      \
         JsonBuilder& builder,                                      \
-        bool front,                                                \
-        JsonConstIterator const& itParent,                         \
-        std::string_view const& name,                           \
-        DataType const& data)                                      \
+        DataType InRef data)                                      \
     {                                                              \
-        return builder.AddValue(                                   \
-            front, itParent, name, ValueType, DataSize, DataPtr);  \
+        return builder._newValueCommit(ValueType, DataSize, DataPtr);\
     }
 
 #define IMPLEMENT_GetUnchecked(DataType, ValueType)                   \
@@ -936,8 +1286,8 @@ and i32) aren't perfectly optimal... But they're probably close enough.
         return static_cast<DataType>(GetUnchecked##ValueType(value)); \
     }
 
-#define IMPLEMENT_JsonImplementType(DataType, ValueType)          \
-    IMPLEMENT_AddValue(DataType, sizeof(data), &data, ValueType); \
+#define IMPLEMENT_JsonImplementType(DataType, ValueType, InRef)   \
+    IMPLEMENT_AddValue(DataType, sizeof(data), &data, ValueType, InRef); \
     IMPLEMENT_GetUnchecked(DataType, ValueType);                  \
                                                                   \
     bool JsonImplementType<DataType>::ConvertTo(                  \
@@ -987,7 +1337,7 @@ bool JsonImplementType<bool>::ConvertTo(JsonValue const& value, bool& result) no
     return success;
 }
 
-IMPLEMENT_AddValue(bool, sizeof(data), &data, JsonBool);
+IMPLEMENT_AddValue(bool, sizeof(data), &data, JsonBool, );
 
 // JsonUInt
 
@@ -1066,7 +1416,7 @@ static uint64_t GetUncheckedJsonUInt(JsonValue const& value)
     return result;
 }
 
-IMPLEMENT_AddValue(unsigned long long, sizeof(data), &data, JsonUInt);
+IMPLEMENT_AddValue(unsigned long long, sizeof(data), &data, JsonUInt, );
 IMPLEMENT_GetUnchecked(unsigned long long, JsonUInt);
 
 template<class T>
@@ -1088,10 +1438,10 @@ static bool ConvertToJsonUInt(JsonValue const& value, T& result)
     return success;
 }
 
-IMPLEMENT_JsonImplementType(unsigned char, JsonUInt);
-IMPLEMENT_JsonImplementType(unsigned short, JsonUInt);
-IMPLEMENT_JsonImplementType(unsigned int, JsonUInt);
-IMPLEMENT_JsonImplementType(unsigned long, JsonUInt);
+IMPLEMENT_JsonImplementType(unsigned char, JsonUInt, );
+IMPLEMENT_JsonImplementType(unsigned short, JsonUInt, );
+IMPLEMENT_JsonImplementType(unsigned int, JsonUInt, );
+IMPLEMENT_JsonImplementType(unsigned long, JsonUInt, );
 
 // JsonInt
 
@@ -1170,7 +1520,7 @@ static int64_t GetUncheckedJsonInt(JsonValue const& value)
     return result;
 }
 
-IMPLEMENT_AddValue(signed long long, sizeof(data), &data, JsonInt);
+IMPLEMENT_AddValue(signed long long, sizeof(data), &data, JsonInt, );
 IMPLEMENT_GetUnchecked(signed long long, JsonInt);
 
 template<class T>
@@ -1195,10 +1545,10 @@ static bool ConvertToJsonInt(JsonValue const& value, T& result)
     return success;
 }
 
-IMPLEMENT_JsonImplementType(signed char, JsonInt);
-IMPLEMENT_JsonImplementType(signed short, JsonInt);
-IMPLEMENT_JsonImplementType(signed int, JsonInt);
-IMPLEMENT_JsonImplementType(signed long, JsonInt);
+IMPLEMENT_JsonImplementType(signed char, JsonInt, );
+IMPLEMENT_JsonImplementType(signed short, JsonInt, );
+IMPLEMENT_JsonImplementType(signed int, JsonInt, );
+IMPLEMENT_JsonImplementType(signed long, JsonInt, );
 
 // JsonFloat
 
@@ -1258,7 +1608,7 @@ bool JsonImplementType<double>::ConvertTo(
     return success;
 }
 
-IMPLEMENT_AddValue(double, sizeof(data), &data, JsonFloat);
+IMPLEMENT_AddValue(double, sizeof(data), &data, JsonFloat, );
 
 #define GetUncheckedJsonFloat(value) \
     JsonImplementType<double>::GetUnchecked(value)
@@ -1272,19 +1622,16 @@ static bool ConvertToJsonFloat(JsonValue const& value, T& result)
     return success;
 }
 
-IMPLEMENT_JsonImplementType(float, JsonFloat);
+IMPLEMENT_JsonImplementType(float, JsonFloat, );
 
 // JsonUtf8
 
-JsonIterator JsonImplementType<char*>::AddValue(
+JsonIterator
+JsonImplementType<char*>::AddValueCommit(
     JsonBuilder& builder,
-    bool front,
-    JsonConstIterator const& itParent,
-    std::string_view const& name,
     _In_z_ char const* psz)
 {
-    return builder.AddValue(
-        front, itParent, name, JsonUtf8, static_cast<unsigned>(strlen(psz)), psz);
+    return builder._newValueCommit(JsonUtf8, static_cast<unsigned>(strlen(psz)), psz);
 }
 
 std::string_view
@@ -1316,34 +1663,24 @@ bool JsonImplementType<std::string_view>::ConvertTo(
     return success;
 }
 
-JsonIterator JsonImplementType<std::string_view>::AddValue(
+JsonIterator
+JsonImplementType<std::string_view>::AddValueCommit(
     JsonBuilder& builder,
-    bool front,
-    JsonConstIterator const& itParent,
-    std::string_view const& name,
-    std::string_view const& data)
+    std::string_view data)
 {
-    return builder.AddValue(
-        front,
-        itParent,
-        name,
-        JsonUtf8,
-        static_cast<unsigned>(data.size()),
-        data.data());
+    return builder._newValueCommit(JsonUtf8, static_cast<unsigned>(data.size()), data.data());
 }
 
 // JsonTime
 
-JsonIterator JsonImplementType<std::chrono::system_clock::time_point>::AddValue(
+JsonIterator
+JsonImplementType<std::chrono::system_clock::time_point>::AddValueCommit(
     JsonBuilder& builder,
-    bool front,
-    JsonConstIterator const& itParent,
-    std::string_view const& name,
-    std::chrono::system_clock::time_point const& data)
+    std::chrono::system_clock::time_point data)
 {
     uint64_t const ft = FileTime1970Ticks + std::chrono::duration_cast<ticks>(data.time_since_epoch()).count();
     auto const timeStruct = TimeStruct::FromValue(ft);
-    return builder.AddValue(front, itParent, name, JsonTime, sizeof(timeStruct), &timeStruct);
+    return builder._newValueCommit(JsonTime, sizeof(timeStruct), &timeStruct);
 }
 
 bool JsonImplementType<std::chrono::system_clock::time_point>::ConvertTo(
@@ -1387,7 +1724,7 @@ JsonImplementType<std::chrono::system_clock::time_point>::GetUnchecked(
     }
 }
 
-IMPLEMENT_AddValue(TimeStruct, sizeof(TimeStruct), &data, JsonTime);
+IMPLEMENT_AddValue(TimeStruct, sizeof(TimeStruct), &data, JsonTime, );
 
 bool JsonImplementType<TimeStruct>::ConvertTo(
     JsonValue const& jsonValue,
@@ -1423,7 +1760,7 @@ JsonImplementType<TimeStruct>::GetUnchecked(JsonValue const& jsonValue) noexcept
 
 // JsonUuid
 
-IMPLEMENT_AddValue(UuidStruct, sizeof(UuidStruct), &data, JsonUuid);
+IMPLEMENT_AddValue(UuidStruct, sizeof(UuidStruct), &data, JsonUuid, const&);
 
 bool JsonImplementType<UuidStruct>::ConvertTo(
     JsonValue const& jsonValue,
