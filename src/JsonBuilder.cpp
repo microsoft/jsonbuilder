@@ -1174,6 +1174,78 @@ JsonBuilder::_newValueCommit(
     return iterator(const_iterator(this, newIndex));
 }
 
+JsonBuilder::iterator
+JsonBuilder::NewValueCommitAsUtfImpl(
+    JsonType type,
+    JsonInternal::JSON_SIZE_T cchData,
+    _In_reads_(cchData) char const* pchDataUtf8)
+    noexcept(false)
+{
+    if (cchData > DataMax)
+    {
+        JsonThrowLengthError("JsonBuilder - cchData too large");
+    }
+    return _newValueCommit(type, static_cast<unsigned>(cchData), pchDataUtf8);
+}
+
+JsonBuilder::iterator
+JsonBuilder::NewValueCommitAsUtfImpl(
+    JsonType type,
+    JsonInternal::JSON_SIZE_T cchData,
+    _In_reads_(cchData) char16_t const* pchDataUtf16)
+    noexcept(false)  // may throw bad_alloc, length_error
+{
+    auto constexpr WorstCaseMultiplier = 3u; // 1 UTF-16 code unit -> 3 UTF-8 code units.
+    if (cchData > DataMax / WorstCaseMultiplier)
+    {
+        JsonThrowLengthError("JsonBuilder - cchData too large");
+    }
+
+    // Create node. Reserve worst-case size for data.
+    auto const cchSrc = static_cast<unsigned>(cchData);
+    auto const valueIt = _newValueCommit(type, cchSrc * WorstCaseMultiplier, nullptr);
+
+    // Copy data into node, converting to UTF-8.
+    auto& value = GetValue(valueIt.m_index);
+    auto const valueDataIndex = valueIt.m_index + DATA_OFFSET(value.m_cchName);
+    auto const cbDest = Utf16ToUtf8(reinterpret_cast<unsigned char*>(&m_storage[valueDataIndex]), pchDataUtf16, cchSrc);
+
+    // Shrink to fit actual data size.
+    value.m_cbData = cbDest; // Shrink
+    m_storage.resize(valueDataIndex + (cbDest + StorageSize - 1) / StorageSize); // Shrink
+
+    return valueIt;
+}
+
+JsonBuilder::iterator
+JsonBuilder::NewValueCommitAsUtfImpl(
+    JsonType type,
+    JsonInternal::JSON_SIZE_T cchData,
+    _In_reads_(cchData) char32_t const* pchDataUtf32)
+    noexcept(false)  // may throw bad_alloc, length_error
+{
+    auto constexpr WorstCaseMultiplier = 4u; // 1 UTF-32 code unit -> 4 UTF-8 code units.
+    if (cchData > DataMax / WorstCaseMultiplier)
+    {
+        JsonThrowLengthError("JsonBuilder - cchData too large");
+    }
+
+    // Create node. Reserve worst-case size for data.
+    auto const cchSrc = static_cast<unsigned>(cchData);
+    auto const valueIt = _newValueCommit(type, cchSrc * WorstCaseMultiplier, nullptr);
+
+    // Copy data into node, converting to UTF-8.
+    auto& value = GetValue(valueIt.m_index);
+    auto const valueDataIndex = valueIt.m_index + DATA_OFFSET(value.m_cchName);
+    auto const cbDest = Utf32ToUtf8(reinterpret_cast<unsigned char*>(&m_storage[valueDataIndex]), pchDataUtf32, cchSrc);
+
+    // Shrink to fit actual data size.
+    value.m_cbData = cbDest; // Shrink
+    m_storage.resize(valueDataIndex + (cbDest + StorageSize - 1) / StorageSize); // Shrink
+
+    return valueIt;
+}
+
 void JsonBuilder::AssertNotEnd(Index index) noexcept
 {
     (void) index;  // Unreferenced parameter in release builds.
@@ -1631,7 +1703,31 @@ JsonImplementType<char*>::AddValueCommit(
     JsonBuilder& builder,
     _In_z_ char const* psz)
 {
-    return builder._newValueCommit(JsonUtf8, static_cast<unsigned>(strlen(psz)), psz);
+    return builder._newValueCommitAsUtf8(JsonUtf8, psz);
+}
+
+JsonIterator
+JsonImplementType<wchar_t*>::AddValueCommit(
+    JsonBuilder& builder,
+    _In_z_ wchar_t const* psz)
+{
+    return builder._newValueCommitAsUtf8(JsonUtf8, psz);
+}
+
+JsonIterator
+JsonImplementType<char16_t*>::AddValueCommit(
+    JsonBuilder& builder,
+    _In_z_ char16_t const* psz)
+{
+    return builder._newValueCommitAsUtf8(JsonUtf8, psz);
+}
+
+JsonIterator
+JsonImplementType<char32_t*>::AddValueCommit(
+    JsonBuilder& builder,
+    _In_z_ char32_t const* psz)
+{
+    return builder._newValueCommitAsUtf8(JsonUtf8, psz);
 }
 
 std::string_view
@@ -1668,7 +1764,31 @@ JsonImplementType<std::string_view>::AddValueCommit(
     JsonBuilder& builder,
     std::string_view data)
 {
-    return builder._newValueCommit(JsonUtf8, static_cast<unsigned>(data.size()), data.data());
+    return builder._newValueCommitAsUtf8(JsonUtf8, data);
+}
+
+JsonIterator
+JsonImplementType<std::wstring_view>::AddValueCommit(
+    JsonBuilder& builder,
+    std::wstring_view data)
+{
+    return builder._newValueCommitAsUtf8(JsonUtf8, data);
+}
+
+JsonIterator
+JsonImplementType<std::u16string_view>::AddValueCommit(
+    JsonBuilder& builder,
+    std::u16string_view data)
+{
+    return builder._newValueCommitAsUtf8(JsonUtf8, data);
+}
+
+JsonIterator
+JsonImplementType<std::u32string_view>::AddValueCommit(
+    JsonBuilder& builder,
+    std::u32string_view data)
+{
+    return builder._newValueCommitAsUtf8(JsonUtf8, data);
 }
 
 // JsonTime

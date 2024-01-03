@@ -1493,9 +1493,54 @@ class JsonBuilder
         _In_reads_bytes_opt_(cbData) void const* pbData)
         noexcept(false);  // may throw bad_alloc, length_error
 
+    /*
+    Advanced scenarios: Should only be called by JsonImplementType<T>::AddValueCommit
+    that itself was called by JsonBuilder. This is the same as _newValueCommit but it
+    converts UTF-8/16/32 data into UTF-8.
+
+    type should usually be JsonUtf8.
+
+    utfData must be a string-view-like thing (pointer to nul-terminated
+    array of CHARs, or contiguous container of CHARs), where CHAR is one
+    of char, char8_t, char16_t, char32_t, or wchar_t. The string is
+    assumed to be UTF-8, UTF-16, or UTF-32 based on sizeof(CHAR).
+    */
+    template<
+        class DataStringView,
+        class DataChar = typename JsonInternal::StringTypeOk<DataStringView>::type>
+    iterator
+    _newValueCommitAsUtf8(
+        JsonType type,
+        DataStringView const& utfData)
+        noexcept(false)  // may throw bad_alloc, length_error
+    {
+        std::basic_string_view<DataChar> dataView{ utfData };
+        using char_type = typename JsonInternal::CharTypeOk<DataChar>::char_type;
+        return NewValueCommitAsUtfImpl(type, dataView.size(), reinterpret_cast<char_type const*>(dataView.data()));
+    }
+
 private:
 
     void CreateRoot() noexcept(false);
+
+    iterator
+    NewValueCommitAsUtfImpl(
+        JsonType type,
+        JsonInternal::JSON_SIZE_T cchData,
+        _In_reads_(cchData) char const* pchDataUtf8)
+        noexcept(false);  // may throw bad_alloc, length_error
+    iterator
+    NewValueCommitAsUtfImpl(
+        JsonType type,
+        JsonInternal::JSON_SIZE_T cchData,
+        _In_reads_(cchData) char16_t const* pchDataUtf16)
+        noexcept(false);  // may throw bad_alloc, length_error
+    iterator
+    NewValueCommitAsUtfImpl(
+        JsonType type,
+        JsonInternal::JSON_SIZE_T cchData,
+        _In_reads_(cchData) char32_t const* pchDataUtf32)
+        noexcept(false);  // may throw bad_alloc, length_error
 
     /*
     Common implementation for NewValueInit.
@@ -1817,6 +1862,17 @@ class JsonImplementType
         static JsonIterator AddValueCommit(JsonBuilder& builder, T InRef data); \
     }
 
+#define JSON_DECLARE_JsonImplementType_AddValueSz(CH)   \
+    template<>                                          \
+    class JsonImplementType<CH*>                        \
+    {                                                   \
+    public:                                             \
+        static JsonIterator AddValueCommit(JsonBuilder& builder, _In_z_ CH const* psz); \
+    };                                                  \
+    template<>                                          \
+    class JsonImplementType<CH const*>                  \
+        : public JsonImplementType<CH*> {};             \
+
 JSON_DECLARE_JsonImplementType(bool,, );
 
 JSON_DECLARE_JsonImplementType(unsigned char,, );
@@ -1837,17 +1893,75 @@ JSON_DECLARE_JsonImplementType(double,, );
 JSON_DECLARE_JsonImplementType(TimeStruct,, );
 JSON_DECLARE_JsonImplementType(std::chrono::system_clock::time_point,, );
 JSON_DECLARE_JsonImplementType(UuidStruct, const&, const&);
-JSON_DECLARE_JsonImplementType(std::string_view,, );
 
+JSON_DECLARE_JsonImplementType(std::string_view,, );
+JSON_DECLARE_JsonImplementType_AddValue(std::wstring_view, );
+JSON_DECLARE_JsonImplementType_AddValue(std::u16string_view, );
+JSON_DECLARE_JsonImplementType_AddValue(std::u32string_view, );
+
+JSON_DECLARE_JsonImplementType_AddValueSz(char);
+JSON_DECLARE_JsonImplementType_AddValueSz(wchar_t);
+JSON_DECLARE_JsonImplementType_AddValueSz(char16_t);
+JSON_DECLARE_JsonImplementType_AddValueSz(char32_t);
+
+#ifdef __cpp_lib_char8_t // Support u8string_view and char8_t, inline so they work even if lib builds as C++17.
+
+// JSON_DECLARE_JsonImplementType(std::u8string_view,, ):
 template<>
-class JsonImplementType<char*>
+class JsonImplementType<std::u8string_view>
 {
 public:
-    static JsonIterator AddValueCommit(JsonBuilder& builder, _In_z_ char const* psz);
+
+    static std::u8string_view
+    GetUnchecked(JsonValue const& value) noexcept
+    {
+        auto charResult = JsonImplementType<std::string_view>::GetUnchecked(value);
+        return { reinterpret_cast<char8_t const*>(charResult.data()), charResult.size() };
+    }
+
+    static bool
+    ConvertTo(JsonValue const& value, std::u8string_view& result) noexcept
+    {
+        bool success;
+
+        if (value.Type() == JsonUtf8)
+        {
+            result = GetUnchecked(value);
+            success = true;
+        }
+        else
+        {
+            result = std::u8string_view();
+            success = false;
+        }
+
+        return success;
+    }
+
+    static JsonIterator
+    AddValueCommit(JsonBuilder& builder, std::u8string_view data)
+    {
+        return builder._newValueCommitAsUtf8(JsonUtf8, data);
+    }
+};
+
+// JSON_DECLARE_JsonImplementType_AddValueSz(char8_t):
+template<>
+class JsonImplementType<char8_t*>
+{
+public:
+
+    static JsonIterator
+    AddValueCommit(JsonBuilder& builder, _In_z_ char8_t const* psz)
+    {
+        return builder._newValueCommitAsUtf8(JsonUtf8, psz);
+    }
 };
 
 template<>
-class JsonImplementType<char const*> : public JsonImplementType<char*>
-{};
+class JsonImplementType<char8_t const*>
+    : public JsonImplementType<char8_t*> {};
+
+#endif // __cpp_lib_char8_t
 
 } // namespace jsonbuilder
