@@ -1496,6 +1496,25 @@ class JsonBuilder
     /*
     Advanced scenarios: Should only be called by JsonImplementType<T>::AddValueCommit
     that itself was called by JsonBuilder. This is the same as _newValueCommit but it
+    converts SBCS data into UTF-8.
+
+    type should usually be JsonUtf8.
+
+    sbcsData must contain data encoded using a single-byte character set (SBCS).
+    Characters < 0x80 are interpreted as ASCII. Characters >= 0x80 are looked up in the
+    provided high128 table, char16 = high128[(UCHAR)char8 - 0x80]. Values in the
+    high128 table should not be in the surrogate range 0xD800..0xDFFF.
+    */
+    iterator
+    _newValueCommitSbcsAsUtf8(
+        JsonType type,
+        std::string_view sbcsData,
+        _In_reads_(128) char16_t const* high128)
+        noexcept(false);  // may throw bad_alloc, length_error
+
+    /*
+    Advanced scenarios: Should only be called by JsonImplementType<T>::AddValueCommit
+    that itself was called by JsonBuilder. This is the same as _newValueCommit but it
     converts UTF-8/16/32 data into UTF-8.
 
     type should usually be JsonUtf8.
@@ -1509,14 +1528,14 @@ class JsonBuilder
         class DataStringView,
         class DataChar = typename JsonInternal::StringTypeOk<DataStringView>::type>
     iterator
-    _newValueCommitAsUtf8(
+    _newValueCommitUtfAsUtf8(
         JsonType type,
         DataStringView const& utfData)
         noexcept(false)  // may throw bad_alloc, length_error
     {
         std::basic_string_view<DataChar> dataView{ utfData };
         using char_type = typename JsonInternal::CharTypeOk<DataChar>::char_type;
-        return NewValueCommitAsUtfImpl(type, dataView.size(), reinterpret_cast<char_type const*>(dataView.data()));
+        return NewValueCommitUtfAsUtf8Impl(type, dataView.size(), reinterpret_cast<char_type const*>(dataView.data()));
     }
 
 private:
@@ -1524,19 +1543,19 @@ private:
     void CreateRoot() noexcept(false);
 
     iterator
-    NewValueCommitAsUtfImpl(
+    NewValueCommitUtfAsUtf8Impl(
         JsonType type,
         JsonInternal::JSON_SIZE_T cchData,
         _In_reads_(cchData) char const* pchDataUtf8)
         noexcept(false);  // may throw bad_alloc, length_error
     iterator
-    NewValueCommitAsUtfImpl(
+    NewValueCommitUtfAsUtf8Impl(
         JsonType type,
         JsonInternal::JSON_SIZE_T cchData,
         _In_reads_(cchData) char16_t const* pchDataUtf16)
         noexcept(false);  // may throw bad_alloc, length_error
     iterator
-    NewValueCommitAsUtfImpl(
+    NewValueCommitUtfAsUtf8Impl(
         JsonType type,
         JsonInternal::JSON_SIZE_T cchData,
         _In_reads_(cchData) char32_t const* pchDataUtf32)
@@ -1788,6 +1807,22 @@ public:
     }
 };
 
+/*
+String view using Latin-1 (ISO-8859-1) encoding.
+*/
+struct latin1_view : std::string_view
+{
+    using std::string_view::string_view;
+};
+
+/*
+String view using cp1252 encoding.
+*/
+struct cp1252_view : std::string_view
+{
+    using std::string_view::string_view;
+};
+
 // JsonImplementType
 
 /*
@@ -1893,6 +1928,8 @@ JSON_DECLARE_JsonImplementType(double,, );
 JSON_DECLARE_JsonImplementType(TimeStruct,, );
 JSON_DECLARE_JsonImplementType(std::chrono::system_clock::time_point,, );
 JSON_DECLARE_JsonImplementType(UuidStruct, const&, const&);
+JSON_DECLARE_JsonImplementType_AddValue(latin1_view, );
+JSON_DECLARE_JsonImplementType_AddValue(cp1252_view, );
 
 JSON_DECLARE_JsonImplementType(std::string_view,, );
 JSON_DECLARE_JsonImplementType_AddValue(std::wstring_view, );
@@ -1941,7 +1978,7 @@ public:
     static JsonIterator
     AddValueCommit(JsonBuilder& builder, std::u8string_view data)
     {
-        return builder._newValueCommitAsUtf8(JsonUtf8, data);
+        return builder._newValueCommitUtfAsUtf8(JsonUtf8, data);
     }
 };
 
@@ -1954,7 +1991,7 @@ public:
     static JsonIterator
     AddValueCommit(JsonBuilder& builder, _In_z_ char8_t const* psz)
     {
-        return builder._newValueCommitAsUtf8(JsonUtf8, psz);
+        return builder._newValueCommitUtfAsUtf8(JsonUtf8, psz);
     }
 };
 

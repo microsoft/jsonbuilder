@@ -275,6 +275,18 @@ TEST_CASE("JsonBuilder string push_back")
         REQUIRE(itr->GetUnchecked<std::string_view>() == CHAR_USTRING());
     }
 
+    SECTION("push_back latin1_view")
+    {
+        auto itr = b.push_back(b.root(), "", latin1_view{ "ABCDE\x80\x90\x9F\xA0\xB0\xF0\xFF" });
+        REQUIRE(itr->GetUnchecked<std::string_view>() == reinterpret_cast<char const*>(u8"ABCDE\u0080\u0090\u009F\u00A0\u00B0\u00F0\u00FF"));
+    }
+
+    SECTION("push_back cp1252_view")
+    {
+        auto itr = b.push_back(b.root(), "", cp1252_view{ "ABCDE\x80\x90\x9F\xA0\xB0\xF0\xFF" });
+        REQUIRE(itr->GetUnchecked<std::string_view>() == reinterpret_cast<char const*>(u8"ABCDE\u20AC\u0090\u0178\u00A0\u00B0\u00F0\u00FF"));
+    }
+
     // wchar_t
 
     SECTION("push_back std::wstring_view")
