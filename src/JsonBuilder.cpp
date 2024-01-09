@@ -115,6 +115,47 @@ Utf32ToUtf8(
     return iDest;
 }
 
+static unsigned
+SbcsToUtf8(
+    _Out_writes_to_(cchSrc * 3, return) char unsigned* pchDest,
+    _In_reads_(cchSrc) char const* pchSrc,
+    unsigned cchSrc,
+    _In_reads_(128) char16_t const* high128)
+    noexcept
+{
+    unsigned iDest = 0;
+    for (unsigned iSrc = 0; iSrc != cchSrc; iSrc += 1)
+    {
+        char unsigned const ch8 = pchSrc[iSrc];
+        if (ch8 < 0x80)
+        {
+            // ASCII character - don't use lookup table.
+            pchDest[iDest++] = static_cast<char unsigned>(ch8);
+            continue;
+        }
+
+        char16_t const ch = high128[ch8 - 0x80];
+        if (ch < 0x80)
+        {
+            pchDest[iDest++] = static_cast<char unsigned>(ch);
+        }
+        else if (ch < 0x800)
+        {
+            pchDest[iDest++] = static_cast<char unsigned>(0xC0 | (ch >> 6));
+            pchDest[iDest++] = static_cast<char unsigned>(0x80 | (ch & 0x3F));
+        }
+        else
+        {
+            // It could be in the surrogate range, but we don't care.
+            pchDest[iDest++] = static_cast<char unsigned>(0xE0 | (ch >> 12));
+            pchDest[iDest++] = static_cast<char unsigned>(0x80 | ((ch >> 6) & 0x3F));
+            pchDest[iDest++] = static_cast<char unsigned>(0x80 | (ch & 0x3F));
+        }
+    }
+
+    return iDest;
+}
+
 // JsonValue
 
 namespace jsonbuilder {
@@ -1174,6 +1215,107 @@ JsonBuilder::_newValueCommit(
     return iterator(const_iterator(this, newIndex));
 }
 
+JsonBuilder::iterator
+JsonBuilder::_newValueCommitSbcsAsUtf8(
+    JsonType type,
+    std::string_view sbcsData,
+    _In_reads_(128) char16_t const* high128)
+    noexcept(false)  // may throw bad_alloc, length_error
+{
+    auto constexpr WorstCaseMultiplier = 3u; // 1 UTF-16 code unit -> 3 UTF-8 code units.
+    if (sbcsData.size() > DataMax / WorstCaseMultiplier)
+    {
+        JsonThrowLengthError("JsonBuilder - cchData too large");
+    }
+
+    // Create node. Reserve worst-case size for data.
+    auto const cchSrc = static_cast<unsigned>(sbcsData.size());
+    auto const valueIt = _newValueCommit(type, cchSrc * WorstCaseMultiplier, nullptr);
+
+    // Copy data into node, converting to UTF-8.
+    auto& value = GetValue(valueIt.m_index);
+    auto const valueDataIndex = valueIt.m_index + DATA_OFFSET(value.m_cchName);
+    auto const cbDest = SbcsToUtf8(reinterpret_cast<unsigned char*>(&m_storage[valueDataIndex]), sbcsData.data(), cchSrc, high128);
+
+    // Shrink to fit actual data size.
+    value.m_cbData = cbDest; // Shrink
+    m_storage.resize(valueDataIndex + (cbDest + StorageSize - 1) / StorageSize); // Shrink
+
+    return valueIt;
+}
+
+JsonBuilder::iterator
+JsonBuilder::NewValueCommitUtfAsUtf8Impl(
+    JsonType type,
+    JsonInternal::JSON_SIZE_T cchData,
+    _In_reads_(cchData) char const* pchDataUtf8)
+    noexcept(false)
+{
+    if (cchData > DataMax)
+    {
+        JsonThrowLengthError("JsonBuilder - cchData too large");
+    }
+    return _newValueCommit(type, static_cast<unsigned>(cchData), pchDataUtf8);
+}
+
+JsonBuilder::iterator
+JsonBuilder::NewValueCommitUtfAsUtf8Impl(
+    JsonType type,
+    JsonInternal::JSON_SIZE_T cchData,
+    _In_reads_(cchData) char16_t const* pchDataUtf16)
+    noexcept(false)  // may throw bad_alloc, length_error
+{
+    auto constexpr WorstCaseMultiplier = 3u; // 1 UTF-16 code unit -> 3 UTF-8 code units.
+    if (cchData > DataMax / WorstCaseMultiplier)
+    {
+        JsonThrowLengthError("JsonBuilder - cchData too large");
+    }
+
+    // Create node. Reserve worst-case size for data.
+    auto const cchSrc = static_cast<unsigned>(cchData);
+    auto const valueIt = _newValueCommit(type, cchSrc * WorstCaseMultiplier, nullptr);
+
+    // Copy data into node, converting to UTF-8.
+    auto& value = GetValue(valueIt.m_index);
+    auto const valueDataIndex = valueIt.m_index + DATA_OFFSET(value.m_cchName);
+    auto const cbDest = Utf16ToUtf8(reinterpret_cast<unsigned char*>(&m_storage[valueDataIndex]), pchDataUtf16, cchSrc);
+
+    // Shrink to fit actual data size.
+    value.m_cbData = cbDest; // Shrink
+    m_storage.resize(valueDataIndex + (cbDest + StorageSize - 1) / StorageSize); // Shrink
+
+    return valueIt;
+}
+
+JsonBuilder::iterator
+JsonBuilder::NewValueCommitUtfAsUtf8Impl(
+    JsonType type,
+    JsonInternal::JSON_SIZE_T cchData,
+    _In_reads_(cchData) char32_t const* pchDataUtf32)
+    noexcept(false)  // may throw bad_alloc, length_error
+{
+    auto constexpr WorstCaseMultiplier = 4u; // 1 UTF-32 code unit -> 4 UTF-8 code units.
+    if (cchData > DataMax / WorstCaseMultiplier)
+    {
+        JsonThrowLengthError("JsonBuilder - cchData too large");
+    }
+
+    // Create node. Reserve worst-case size for data.
+    auto const cchSrc = static_cast<unsigned>(cchData);
+    auto const valueIt = _newValueCommit(type, cchSrc * WorstCaseMultiplier, nullptr);
+
+    // Copy data into node, converting to UTF-8.
+    auto& value = GetValue(valueIt.m_index);
+    auto const valueDataIndex = valueIt.m_index + DATA_OFFSET(value.m_cchName);
+    auto const cbDest = Utf32ToUtf8(reinterpret_cast<unsigned char*>(&m_storage[valueDataIndex]), pchDataUtf32, cchSrc);
+
+    // Shrink to fit actual data size.
+    value.m_cbData = cbDest; // Shrink
+    m_storage.resize(valueDataIndex + (cbDest + StorageSize - 1) / StorageSize); // Shrink
+
+    return valueIt;
+}
+
 void JsonBuilder::AssertNotEnd(Index index) noexcept
 {
     (void) index;  // Unreferenced parameter in release builds.
@@ -1631,7 +1773,31 @@ JsonImplementType<char*>::AddValueCommit(
     JsonBuilder& builder,
     _In_z_ char const* psz)
 {
-    return builder._newValueCommit(JsonUtf8, static_cast<unsigned>(strlen(psz)), psz);
+    return builder._newValueCommitUtfAsUtf8(JsonUtf8, psz);
+}
+
+JsonIterator
+JsonImplementType<wchar_t*>::AddValueCommit(
+    JsonBuilder& builder,
+    _In_z_ wchar_t const* psz)
+{
+    return builder._newValueCommitUtfAsUtf8(JsonUtf8, psz);
+}
+
+JsonIterator
+JsonImplementType<char16_t*>::AddValueCommit(
+    JsonBuilder& builder,
+    _In_z_ char16_t const* psz)
+{
+    return builder._newValueCommitUtfAsUtf8(JsonUtf8, psz);
+}
+
+JsonIterator
+JsonImplementType<char32_t*>::AddValueCommit(
+    JsonBuilder& builder,
+    _In_z_ char32_t const* psz)
+{
+    return builder._newValueCommitUtfAsUtf8(JsonUtf8, psz);
 }
 
 std::string_view
@@ -1668,7 +1834,69 @@ JsonImplementType<std::string_view>::AddValueCommit(
     JsonBuilder& builder,
     std::string_view data)
 {
-    return builder._newValueCommit(JsonUtf8, static_cast<unsigned>(data.size()), data.data());
+    return builder._newValueCommitUtfAsUtf8(JsonUtf8, data);
+}
+
+JsonIterator
+JsonImplementType<std::wstring_view>::AddValueCommit(
+    JsonBuilder& builder,
+    std::wstring_view data)
+{
+    return builder._newValueCommitUtfAsUtf8(JsonUtf8, data);
+}
+
+JsonIterator
+JsonImplementType<std::u16string_view>::AddValueCommit(
+    JsonBuilder& builder,
+    std::u16string_view data)
+{
+    return builder._newValueCommitUtfAsUtf8(JsonUtf8, data);
+}
+
+JsonIterator
+JsonImplementType<std::u32string_view>::AddValueCommit(
+    JsonBuilder& builder,
+    std::u32string_view data)
+{
+    return builder._newValueCommitUtfAsUtf8(JsonUtf8, data);
+}
+
+JsonIterator
+JsonImplementType<latin1_view>::AddValueCommit(
+    JsonBuilder& builder,
+    latin1_view data)
+{
+    static constexpr char16_t High128[] = {
+        0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8A, 0x8B, 0x8C, 0x8D, 0x8E, 0x8F,
+        0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9A, 0x9B, 0x9C, 0x9D, 0x9E, 0x9F,
+        0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7, 0xA8, 0xA9, 0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF,
+        0xB0, 0xB1, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xB8, 0xB9, 0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF,
+        0xC0, 0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD, 0xCE, 0xCF,
+        0xD0, 0xD1, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7, 0xD8, 0xD9, 0xDA, 0xDB, 0xDC, 0xDD, 0xDE, 0xDF,
+        0xE0, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7, 0xE8, 0xE9, 0xEA, 0xEB, 0xEC, 0xED, 0xEE, 0xEF,
+        0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7, 0xF8, 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF,
+    };
+    static_assert(sizeof(High128) == 128 * sizeof(High128[0]), "High128 size");
+    return builder._newValueCommitSbcsAsUtf8(JsonUtf8, data, High128);
+}
+
+JsonIterator
+JsonImplementType<cp1252_view>::AddValueCommit(
+    JsonBuilder& builder,
+    cp1252_view data)
+{
+    static constexpr char16_t High128[] = {
+        0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, 0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, 0x008D, 0x017D, 0x008F,
+        0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014, 0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x009D, 0x017E, 0x0178,
+        0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7, 0xA8, 0xA9, 0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF,
+        0xB0, 0xB1, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7, 0xB8, 0xB9, 0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF,
+        0xC0, 0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7, 0xC8, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD, 0xCE, 0xCF,
+        0xD0, 0xD1, 0xD2, 0xD3, 0xD4, 0xD5, 0xD6, 0xD7, 0xD8, 0xD9, 0xDA, 0xDB, 0xDC, 0xDD, 0xDE, 0xDF,
+        0xE0, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7, 0xE8, 0xE9, 0xEA, 0xEB, 0xEC, 0xED, 0xEE, 0xEF,
+        0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5, 0xF6, 0xF7, 0xF8, 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF,
+    };
+    static_assert(sizeof(High128) == 128 * sizeof(High128[0]), "High128 size");
+    return builder._newValueCommitSbcsAsUtf8(JsonUtf8, data, High128);
 }
 
 // JsonTime

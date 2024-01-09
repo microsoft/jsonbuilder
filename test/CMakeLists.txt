@@ -7,7 +7,7 @@ if(NOT WIN32)
 endif()
 
 add_executable(jsonbuilderTest CatchMain.cpp TestBuilder.cpp TestRenderer.cpp)
-target_compile_features(jsonbuilderTest PRIVATE cxx_std_17)
+target_compile_features(jsonbuilderTest PRIVATE cxx_std_20)
 target_link_libraries(jsonbuilderTest PRIVATE jsonbuilder Catch2::Catch2 ${LIB_TARGET_UUID})
 
 include(CTest)

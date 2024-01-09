@@ -5,6 +5,9 @@
 #include <jsonbuilder/JsonBuilder.h>
 #include <string.h>
 
+#define USTRING(prefix) prefix ## "\u0024\u00A3\u0418\u0939\u20AC\uD55C\U00010348"
+#define CHAR_USTRING() reinterpret_cast<char const*>(USTRING(u8))
+
 #ifdef _WIN32
 using uuid_t = char unsigned[16];
 static void uuid_generate(uuid_t uuid)
@@ -101,8 +104,6 @@ static void TestInputOutputScalar()
 
     JsonBuilder b;
 
-#define USTRING(prefix) prefix ## "\u0024\u00A3\u0418\u0939\u20AC\uD55C\U00010348"
-
     b.push_back(b.root(), USTRING(u), InputLimits::lowest());
     b.push_back(b.root(), USTRING(U), InputLimits::min());
     b.push_back(b.root(), USTRING(L), InputLimits::max());
@@ -115,25 +116,25 @@ static void TestInputOutputScalar()
     InputType i;
 
     auto it = b.begin();
-    REQUIRE(it->Name() == USTRING(u8));
+    REQUIRE(it->Name() == CHAR_USTRING());
     REQUIRE(it->GetUnchecked<InputType>() == InputLimits::lowest());
     REQUIRE(it->ConvertTo(i));
     REQUIRE(i == InputLimits::lowest());
 
     ++it;
-    REQUIRE(it->Name() == USTRING(u8));
+    REQUIRE(it->Name() == CHAR_USTRING());
     REQUIRE(it->GetUnchecked<InputType>() == InputLimits::min());
     REQUIRE(it->ConvertTo(i));
     REQUIRE(i == InputLimits::min());
 
     ++it;
-    REQUIRE(it->Name() == USTRING(u8));
+    REQUIRE(it->Name() == CHAR_USTRING());
     REQUIRE(it->GetUnchecked<InputType>() == InputLimits::max());
     REQUIRE(it->ConvertTo(i));
     REQUIRE(i == InputLimits::max());
 
     ++it;
-    REQUIRE(it->Name() == USTRING(u8));
+    REQUIRE(it->Name() == CHAR_USTRING());
     REQUIRE(
         it->GetUnchecked<InputType>() ==
         static_cast<InputType>(OutputLimits::lowest()));
@@ -242,6 +243,8 @@ TEST_CASE("JsonBuilder string push_back")
 {
     JsonBuilder b;
 
+    // char
+
     SECTION("push_back std::string_view")
     {
         auto itr = b.push_back(b.root(), "", std::string_view{ "ABCDE" });
@@ -268,9 +271,162 @@ TEST_CASE("JsonBuilder string push_back")
 
     SECTION("push_back const char[]")
     {
-        auto itr = b.push_back(b.root(), "", "HIJ");
-        REQUIRE(itr->GetUnchecked<std::string_view>() == "HIJ");
+        auto itr = b.push_back(b.root(), "", CHAR_USTRING());
+        REQUIRE(itr->GetUnchecked<std::string_view>() == CHAR_USTRING());
     }
+
+    SECTION("push_back latin1_view")
+    {
+        auto itr = b.push_back(b.root(), "", latin1_view{ "ABCDE\x80\x90\x9F\xA0\xB0\xF0\xFF" });
+        REQUIRE(itr->GetUnchecked<std::string_view>() == reinterpret_cast<char const*>(u8"ABCDE\u0080\u0090\u009F\u00A0\u00B0\u00F0\u00FF"));
+    }
+
+    SECTION("push_back cp1252_view")
+    {
+        auto itr = b.push_back(b.root(), "", cp1252_view{ "ABCDE\x80\x90\x9F\xA0\xB0\xF0\xFF" });
+        REQUIRE(itr->GetUnchecked<std::string_view>() == reinterpret_cast<char const*>(u8"ABCDE\u20AC\u0090\u0178\u00A0\u00B0\u00F0\u00FF"));
+    }
+
+    // wchar_t
+
+    SECTION("push_back std::wstring_view")
+    {
+        auto itr = b.push_back(b.root(), "", std::wstring_view{ L"ABCDE" });
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "ABCDE");
+    }
+
+    SECTION("push_back std::wstring")
+    {
+        auto itr = b.push_back<std::wstring_view>(b.root(), "", std::wstring{ L"ABCDE" });
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "ABCDE");
+    }
+
+    SECTION("push_back wchar_t*")
+    {
+        auto itr = b.push_back(b.root(), "", const_cast<wchar_t*>(L"ABC"));
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "ABC");
+    }
+
+    SECTION("push_back const wchar_t*")
+    {
+        auto itr = b.push_back(b.root(), "", static_cast<const wchar_t*>(L"DEF"));
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "DEF");
+    }
+
+    SECTION("push_back const wchar_t[]")
+    {
+        auto itr = b.push_back(b.root(), "", USTRING(L));
+        REQUIRE(itr->GetUnchecked<std::string_view>() == CHAR_USTRING());
+    }
+
+    // char8_t
+
+#ifdef __cpp_lib_char8_t // C++20
+
+    SECTION("push_back std::u8string_view")
+    {
+        auto itr = b.push_back(b.root(), "", std::u8string_view{ u8"ABCDE" });
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "ABCDE");
+        REQUIRE(itr->GetUnchecked<std::u8string_view>() == u8"ABCDE");
+    }
+
+    SECTION("push_back std::u8string")
+    {
+        auto itr = b.push_back<std::u8string_view>(b.root(), "", std::u8string{ u8"ABCDE" });
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "ABCDE");
+        REQUIRE(itr->GetUnchecked<std::u8string_view>() == u8"ABCDE");
+    }
+
+    SECTION("push_back char8_t*")
+    {
+        auto itr = b.push_back(b.root(), "", const_cast<char8_t*>(u8"ABC"));
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "ABC");
+        REQUIRE(itr->GetUnchecked<std::u8string_view>() == u8"ABC");
+    }
+
+    SECTION("push_back const char8_t*")
+    {
+        auto itr = b.push_back(b.root(), "", static_cast<const char8_t*>(u8"DEF"));
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "DEF");
+        REQUIRE(itr->GetUnchecked<std::u8string_view>() == u8"DEF");
+    }
+
+#endif // __cpp_lib_char8_t
+
+    SECTION("push_back const char8_t[]")
+    {
+        auto itr = b.push_back(b.root(), "", USTRING(u8));
+        REQUIRE(itr->GetUnchecked<std::string_view>() == CHAR_USTRING());
+#ifdef __cpp_lib_char8_t // C++20
+        REQUIRE(itr->GetUnchecked<std::u8string_view>() == USTRING(u8));
+#endif // __cpp_lib_char8_t
+    }
+
+    // char16_t
+
+    SECTION("push_back std::u16string_view")
+    {
+        auto itr = b.push_back(b.root(), "", std::u16string_view{ u"ABCDE" });
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "ABCDE");
+    }
+
+    SECTION("push_back std::u16string")
+    {
+        auto itr = b.push_back<std::u16string_view>(b.root(), "", std::u16string{ u"ABCDE" });
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "ABCDE");
+    }
+
+    SECTION("push_back char16_t*")
+    {
+        auto itr = b.push_back(b.root(), "", const_cast<char16_t*>(u"ABC"));
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "ABC");
+    }
+
+    SECTION("push_back const char16_t*")
+    {
+        auto itr = b.push_back(b.root(), "", static_cast<const char16_t*>(u"DEF"));
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "DEF");
+    }
+
+    SECTION("push_back const char16_t[]")
+    {
+        auto itr = b.push_back(b.root(), "", USTRING(u));
+        REQUIRE(itr->GetUnchecked<std::string_view>() == CHAR_USTRING());
+    }
+
+    // char32_t
+
+    SECTION("push_back std::u32string_view")
+    {
+        auto itr = b.push_back(b.root(), "", std::u32string_view{ U"ABCDE" });
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "ABCDE");
+    }
+
+    SECTION("push_back std::u32string")
+    {
+        auto itr = b.push_back<std::u32string_view>(b.root(), "", std::u32string{ U"ABCDE" });
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "ABCDE");
+    }
+
+    SECTION("push_back char32_t*")
+    {
+        auto itr = b.push_back(b.root(), "", const_cast<char32_t*>(U"ABC"));
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "ABC");
+    }
+
+    SECTION("push_back const char32_t*")
+    {
+        auto itr = b.push_back(b.root(), "", static_cast<const char32_t*>(U"DEF"));
+        REQUIRE(itr->GetUnchecked<std::string_view>() == "DEF");
+    }
+
+    SECTION("push_back const char32_t[]")
+    {
+        auto itr = b.push_back(b.root(), "", USTRING(U));
+        REQUIRE(itr->GetUnchecked<std::string_view>() == CHAR_USTRING());
+    }
+
+    b.ValidateData();
 }
 
 TEST_CASE("JsonBuilder chrono push_back", "[builder]")
