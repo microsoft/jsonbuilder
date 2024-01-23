@@ -18,6 +18,16 @@ static_assert(sizeof(time_t) == 8, "time_t must be 64 bits");
 #include <charconv>
 #include <limits>
 
+#ifdef __cpp_lib_to_chars
+#define FORMAT_DOUBLE_USING_TO_CHARS 1
+#else
+#define FORMAT_DOUBLE_USING_TO_CHARS 0
+#endif
+
+#if !FORMAT_DOUBLE_USING_TO_CHARS
+#include <cstdio>
+#endif
+
 #ifndef _Out_writes_
 #define _Out_writes_(c)
 #endif
@@ -111,11 +121,26 @@ unsigned JsonRenderFloat(double n, _Out_writes_z_(32) char* pBuffer) noexcept
             Log10Ceil(std::numeric_limits<double>::max_exponent10);
         static_assert(cchMax <= CB, "Unexpected max_digits10");
 
+#if FORMAT_DOUBLE_USING_TO_CHARS
+
         auto const result = std::to_chars(pBuffer, pBuffer + CB - 1, n);
         cch = static_cast<unsigned>(result.ptr - pBuffer);
         assert(result.ec == std::errc());
         assert(cch < CB);
         pBuffer[cch] = 0;
+
+#else // FORMAT_DOUBLE_USING_TO_CHARS
+
+        cch = static_cast<unsigned>(std::snprintf(pBuffer, CB, "%.17g", n));
+        if (cch >= CB)
+        {
+            // Unexpected - should always fit.
+            assert(false);
+            cch = CB - 1;
+            pBuffer[cch] = 0;
+        }
+
+#endif // FORMAT_DOUBLE_USING_TO_CHARS
     }
     else
     {
