@@ -1777,7 +1777,81 @@ Does NOT use the same byte order as the Windows GUID type.
 */
 struct UuidStruct
 {
-    char unsigned Data[16]; // Compatible with uuid_t from libuuid.
+    char unsigned Data[16]; // Big-endian, compatible with uuid_t from libuuid.
+
+    // Input is a UUID in big-endian order, e.g. uuid_t from libuuid.
+    static constexpr UuidStruct
+    FromBigEndian(_In_reads_bytes_(16) char unsigned const* data) noexcept
+    {
+        return UuidStruct{ {
+                data[0], data[1], data[2], data[3],
+                data[4], data[5],
+                data[6], data[7],
+                data[8], data[9], data[10], data[11], data[12], data[13], data[14], data[15],
+            } };
+    }
+
+    // Input is a UUID in little-endian order, e.g. GUID from Windows.
+    static constexpr UuidStruct
+    FromLittleEndian(_In_reads_bytes_(16) char unsigned const* data) noexcept
+    {
+        return UuidStruct{ {
+                data[3], data[2], data[1], data[0],
+                data[5], data[4],
+                data[7], data[6],
+                data[8], data[9], data[10], data[11], data[12], data[13], data[14], data[15],
+            } };
+    }
+
+    // Output is a UUID in big-endian order, compatible with libuuid uuid_t.
+    constexpr void
+    ToBigEndian(_Out_writes_bytes_(16) char unsigned* data) noexcept
+    {
+        data[0] = Data[0];
+        data[1] = Data[1];
+        data[2] = Data[2];
+        data[3] = Data[3];
+
+        data[4] = Data[4];
+        data[5] = Data[5];
+
+        data[6] = Data[6];
+        data[7] = Data[7];
+
+        data[8] = Data[8];
+        data[9] = Data[9];
+        data[10] = Data[10];
+        data[11] = Data[11];
+        data[12] = Data[12];
+        data[13] = Data[13];
+        data[14] = Data[14];
+        data[15] = Data[15];
+    }
+
+    // Output is a UUID in little-endian order, compatible with Windows GUID.
+    constexpr void
+    ToLittleEndian(_Out_writes_bytes_(16) char unsigned* data) noexcept
+    {
+        data[0] = Data[3];
+        data[1] = Data[2];
+        data[2] = Data[1];
+        data[3] = Data[0];
+
+        data[4] = Data[5];
+        data[5] = Data[4];
+
+        data[6] = Data[7];
+        data[7] = Data[6];
+
+        data[8] = Data[8];
+        data[9] = Data[9];
+        data[10] = Data[10];
+        data[11] = Data[11];
+        data[12] = Data[12];
+        data[13] = Data[13];
+        data[14] = Data[14];
+        data[15] = Data[15];
+    }
 };
 
 /*
