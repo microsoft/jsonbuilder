@@ -1235,7 +1235,8 @@ JsonBuilder::_newValueCommitSbcsAsUtf8(
     // Copy data into node, converting to UTF-8.
     auto& value = GetValue(valueIt.m_index);
     auto const valueDataIndex = valueIt.m_index + DATA_OFFSET(value.m_cchName);
-    auto const cbDest = SbcsToUtf8(reinterpret_cast<unsigned char*>(&m_storage[valueDataIndex]), sbcsData.data(), cchSrc, high128);
+    assert(m_storage.size() - valueDataIndex >= (cchSrc * WorstCaseMultiplier + StorageSize - 1u) / StorageSize);
+    auto const cbDest = SbcsToUtf8(reinterpret_cast<unsigned char*>(m_storage.data() + valueDataIndex), sbcsData.data(), cchSrc, high128);
 
     // Shrink to fit actual data size.
     value.m_cbData = cbDest; // Shrink
@@ -1278,7 +1279,8 @@ JsonBuilder::NewValueCommitUtfAsUtf8Impl(
     // Copy data into node, converting to UTF-8.
     auto& value = GetValue(valueIt.m_index);
     auto const valueDataIndex = valueIt.m_index + DATA_OFFSET(value.m_cchName);
-    auto const cbDest = Utf16ToUtf8(reinterpret_cast<unsigned char*>(&m_storage[valueDataIndex]), pchDataUtf16, cchSrc);
+    assert(m_storage.size() - valueDataIndex >= (cchSrc * WorstCaseMultiplier + StorageSize - 1u) / StorageSize);
+    auto const cbDest = Utf16ToUtf8(reinterpret_cast<unsigned char*>(m_storage.data() + valueDataIndex), pchDataUtf16, cchSrc);
 
     // Shrink to fit actual data size.
     value.m_cbData = cbDest; // Shrink
@@ -1307,7 +1309,8 @@ JsonBuilder::NewValueCommitUtfAsUtf8Impl(
     // Copy data into node, converting to UTF-8.
     auto& value = GetValue(valueIt.m_index);
     auto const valueDataIndex = valueIt.m_index + DATA_OFFSET(value.m_cchName);
-    auto const cbDest = Utf32ToUtf8(reinterpret_cast<unsigned char*>(&m_storage[valueDataIndex]), pchDataUtf32, cchSrc);
+    assert(m_storage.size() - valueDataIndex >= (cchSrc * WorstCaseMultiplier + StorageSize - 1u) / StorageSize);
+    auto const cbDest = Utf32ToUtf8(reinterpret_cast<unsigned char*>(m_storage.data() + valueDataIndex), pchDataUtf32, cchSrc);
 
     // Shrink to fit actual data size.
     value.m_cbData = cbDest; // Shrink
