@@ -2026,4 +2026,22 @@ JsonImplementType<UuidStruct>::GetUnchecked(JsonValue const& jsonValue) noexcept
         emptyUuid;
 }
 
+// JsonType
+
+JsonIterator
+JsonImplementType<JsonType>::AddValueCommit(
+    JsonBuilder& builder,
+    JsonType type)
+{
+    // This method is only for 0-size values like null, array, or object.
+    // The following types cannot have 0-size values and should not call this:
+    assert(type != JsonUInt);
+    assert(type != JsonInt);
+    assert(type != JsonFloat);
+    assert(type != JsonBool);
+    assert(type != JsonTime);
+    assert(type != JsonUuid);
+    return builder._newValueCommit(type, 0, nullptr);
+}
+
 }  // namespace jsonbuilder

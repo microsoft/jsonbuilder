@@ -1283,8 +1283,8 @@ class JsonBuilder
         const_iterator const& itParent,
         NameStringView const& name,
         JsonType type,
-        unsigned cbData = 0,
-        _In_reads_bytes_(cbData) void const* pbData = nullptr)
+        unsigned cbData,
+        _In_reads_bytes_opt_(cbData) void const* pbData)
         noexcept(false)  // may throw bad_alloc, length_error
     {
         std::basic_string_view<NameChar> nameView{ name };
@@ -1310,8 +1310,8 @@ class JsonBuilder
         const_iterator const& itParent,
         NameStringView const& name,
         JsonType type,
-        unsigned cbData = 0,
-        _In_reads_bytes_(cbData) void const* pbData = nullptr)
+        unsigned cbData,
+        _In_reads_bytes_opt_(cbData) void const* pbData)
         noexcept(false) // may throw bad_alloc, length_error
     {
         std::basic_string_view<NameChar> nameView{ name };
@@ -1337,8 +1337,8 @@ class JsonBuilder
         const_iterator const& itParent,
         NameStringView const& name,
         JsonType type,
-        unsigned cbData = 0,
-        _In_reads_bytes_(cbData) void const* pbData = nullptr)
+        unsigned cbData,
+        _In_reads_bytes_opt_(cbData) void const* pbData)
         noexcept(false) // may throw bad_alloc, length_error
     {
         std::basic_string_view<NameChar> nameView{ name };
@@ -1357,6 +1357,7 @@ class JsonBuilder
 
     Data must be a supported type. Supported types include:
 
+    - For null, array, object: JsonType (JsonNull, JsonArray, JsonObject).
     - For boolean data: bool.
     - For UTF-8 string data: std::string_view, char*.
     - For integer data: signed and unsigned char, short, int, long, long long.
@@ -1401,6 +1402,7 @@ class JsonBuilder
 
     Data must be a supported type. Supported types include:
 
+    - For null, array, object: JsonType (JsonNull, JsonArray, JsonObject).
     - For boolean data: bool.
     - For UTF-8 string data: std::string_view, char*.
     - For integer data: signed and unsigned char, short, int, long, long long.
@@ -1444,6 +1446,7 @@ class JsonBuilder
 
     Data must be a supported type. Supported types include:
 
+    - For null, array, object: JsonType (JsonNull, JsonArray, JsonObject).
     - For boolean data: bool.
     - For UTF-8 string data: std::string_view, char*.
     - For integer data: signed and unsigned char, short, int, long, long long.
@@ -1602,8 +1605,8 @@ private:
         const_iterator const& itParent,
         NameStringView nameView,
         JsonType type,
-        unsigned cbData = 0,
-        _In_reads_bytes_(cbData) void const* pbData = nullptr)
+        unsigned cbData,
+        _In_reads_bytes_opt_(cbData) void const* pbData)
         noexcept(false)  // may throw bad_alloc, length_error
     {
         using char_type = typename JsonInternal::CharTypeOk<typename NameStringView::value_type>::char_type;
@@ -2014,6 +2017,8 @@ JSON_DECLARE_JsonImplementType_AddValueSz(char);
 JSON_DECLARE_JsonImplementType_AddValueSz(wchar_t);
 JSON_DECLARE_JsonImplementType_AddValueSz(char16_t);
 JSON_DECLARE_JsonImplementType_AddValueSz(char32_t);
+
+JSON_DECLARE_JsonImplementType_AddValue(JsonType, ); // For null, array, object.
 
 #ifdef __cpp_lib_char8_t // Support u8string_view and char8_t, inline so they work even if lib builds as C++17.
 
