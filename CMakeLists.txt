@@ -29,7 +29,7 @@ if (${CMAKE_PROJECT_NAME} STREQUAL ${PROJECT_NAME})
         list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/external/Catch2/contrib")
         add_subdirectory(external/Catch2)
     else ()
-        find_package(Catch2 REQUIRED)
+        find_package(Catch2 3 REQUIRED)
     endif ()
 
     add_subdirectory(test)
